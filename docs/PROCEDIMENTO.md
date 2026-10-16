@@ -34,12 +34,26 @@ obter credenciais varia conforme o provedor e a configuração do ambiente.
 
 ```bash
 cd /caminho/para/capacity-agent
-python3 -m pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/python3 -m pip install -r requirements.txt
 ```
 
 Substitua `/caminho/para/capacity-agent` pelo diretório real do repositório.
-Se usar um ambiente virtual, ative-o antes de instalar as dependências e iniciar
-o sistema.
+O ambiente virtual fica no diretório `.venv/`; não é necessário ativá-lo para
+usar `./serve.sh`, que seleciona automaticamente esse Python.
+
+Se o servidor informar `CAPACITY_AGENT_ENCRYPTION_KEY inválida`, remova uma
+variável antiga ou incorreta do terminal antes de iniciar:
+
+```bash
+unset CAPACITY_AGENT_ENCRYPTION_KEY
+./serve.sh
+```
+
+Sem essa variável, o sistema usa a chave persistida em
+`.capacity-agent/encryption.key`. Se a chave estiver definida intencionalmente,
+ela deve ser uma chave Fernet válida e a mesma usada para cifrar os kubeconfigs
+já cadastrados.
 
 ---
 
@@ -103,6 +117,9 @@ Os passos para obter ou preparar o kubeconfig dependem do provedor Kubernetes
 ---
 
 ## 2.1. Testar em Docker
+
+Para entregar uma imagem pré-construída a um cliente, siga o procedimento
+[Implantação de teste em um cliente](IMPLANTACAO_CLIENTE_TESTE.md).
 
 Instale Docker Engine com o plugin Docker Compose ou Docker Desktop. No
 diretório do projeto, crie o arquivo `.env` com uma chave Fernet persistente.

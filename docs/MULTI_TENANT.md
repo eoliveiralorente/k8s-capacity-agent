@@ -2,7 +2,7 @@
 
 ## Configuração do servidor
 
-Instale as dependências e gere uma chave Fernet uma única vez:
+Instale as dependências. Em produção, gere uma chave Fernet uma única vez:
 
 ```bash
 python3 -m pip install -r requirements.txt
@@ -17,9 +17,12 @@ export CAPACITY_AGENT_COOKIE_SECURE=true
 ./serve.sh
 ```
 
-A chave precisa permanecer estável entre reinicializações. Se for perdida ou
-substituída, os kubeconfigs armazenados não poderão ser descriptografados.
-Faça backup seguro da chave e do arquivo SQLite configurado por
+A chave configurada precisa permanecer estável entre reinicializações. Se
+`CAPACITY_AGENT_ENCRYPTION_KEY` não for definida, o agente gera uma chave em
+`encryption.key`, no mesmo diretório do banco SQLite. Mantenha esse arquivo
+junto com o banco ao mover a instalação para outro ambiente; sem a chave
+original, os kubeconfigs armazenados não poderão ser descriptografados. Faça
+backup seguro da chave e do arquivo SQLite configurado por
 `CAPACITY_AGENT_ACCOUNT_DB`.
 
 O painel remoto deve ser publicado somente por HTTPS, atrás de um proxy reverso

@@ -11,5 +11,6 @@ __pycache__/
 *.bak
 *.bkp*
 *.zip
+*.tar
 test_*.py
 docs/

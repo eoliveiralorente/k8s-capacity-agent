@@ -22,7 +22,10 @@ fi
 
 if [[ -z "$PYTHON" ]]; then
   echo "ERRO: nenhum Python com uvicorn encontrado."
-  echo "Use o venv do projeto: .venv/bin/python3 -m pip install -r requirements.txt"
+  echo "Crie o ambiente virtual e instale as dependências:"
+  echo "  python3 -m venv .venv"
+  echo "  .venv/bin/python3 -m pip install -r requirements.txt"
+  echo "  ./serve.sh"
   exit 1
 fi
 

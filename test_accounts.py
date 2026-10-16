@@ -66,6 +66,28 @@ class AccountStoreTests(unittest.TestCase):
         self.assertIsNone(store.get_cluster(second["tenant_id"], cluster["id"]))
         self.assertEqual(store.list_clusters(second["tenant_id"]), [])
 
+    def test_missing_encryption_key_is_generated_and_persisted(self):
+        with patch.dict(os.environ, {"CAPACITY_AGENT_ENCRYPTION_KEY": ""}):
+            store.initialize_database()
+            key_path = self.database_path.with_name("encryption.key")
+            saved_key = key_path.read_bytes()
+            ciphertext = store._fernet()[0].encrypt(b"test kubeconfig")
+
+            store.initialize_database()
+
+            self.assertEqual(key_path.read_bytes(), saved_key)
+            self.assertEqual(store._fernet()[0].decrypt(ciphertext), b"test kubeconfig")
+            if os.name == "posix":
+                self.assertEqual(key_path.stat().st_mode & 0o777, 0o600)
+
+    def test_invalid_configured_encryption_key_is_rejected(self):
+        with patch.dict(os.environ, {"CAPACITY_AGENT_ENCRYPTION_KEY": "invalid"}):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"CAPACITY_AGENT_ENCRYPTION_KEY inválida.*Fernet.generate_key",
+            ):
+                store._fernet()
+
     def test_session_token_is_hashed_and_revocable(self):
         user = self.register("session@example.test", "Session Company")
         token, _ = store.create_session(user["id"])

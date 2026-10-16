@@ -74,6 +74,7 @@ def initialize_database():
         DB_PATH.parent.chmod(0o700)
     except OSError:
         pass
+    _fernet()
 
 
 def _hash_password(password):
@@ -182,22 +183,52 @@ def delete_session(token):
 
 
 def _fernet():
-    key = os.getenv("CAPACITY_AGENT_ENCRYPTION_KEY", "")
-    if not key:
-        raise RuntimeError("CAPACITY_AGENT_ENCRYPTION_KEY não configurada no servidor")
     from cryptography.fernet import Fernet, InvalidToken
+
+    key = os.getenv("CAPACITY_AGENT_ENCRYPTION_KEY", "").strip()
+    if not key:
+        key_path = DB_PATH.with_name("encryption.key")
+        key_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            key = key_path.read_text(encoding="ascii").strip()
+        except FileNotFoundError:
+            generated_key = Fernet.generate_key()
+            file_descriptor, temporary_path = tempfile.mkstemp(
+                prefix=".encryption-", dir=key_path.parent
+            )
+            try:
+                with os.fdopen(file_descriptor, "wb") as key_file:
+                    key_file.write(generated_key)
+                    key_file.flush()
+                    os.fsync(key_file.fileno())
+                try:
+                    os.link(temporary_path, key_path)
+                except FileExistsError:
+                    pass
+                key_path.chmod(0o600)
+                key = key_path.read_text(encoding="ascii").strip()
+            finally:
+                try:
+                    os.unlink(temporary_path)
+                except FileNotFoundError:
+                    pass
+        except UnicodeDecodeError as exc:
+            raise RuntimeError("Chave de criptografia persistida inválida") from exc
 
     try:
         return Fernet(key.encode("ascii")), InvalidToken
     except (ValueError, UnicodeEncodeError) as exc:
-        raise RuntimeError("CAPACITY_AGENT_ENCRYPTION_KEY inválida") from exc
+        raise RuntimeError(
+            "CAPACITY_AGENT_ENCRYPTION_KEY inválida. Use uma chave Fernet gerada "
+            "com `Fernet.generate_key()` ou remova a variável para usar a chave "
+            f"persistida em {DB_PATH.with_name('encryption.key')}."
+        ) from exc
 
 
 def _run_kubectl_for_kubeconfig(kubeconfig, args):
     if len(kubeconfig) > MAX_KUBECONFIG_BYTES:
         raise ValueError("Arquivo kubeconfig excede o limite de 2 MB")
-    if not os.getenv("CAPACITY_AGENT_ENCRYPTION_KEY"):
-        raise RuntimeError("CAPACITY_AGENT_ENCRYPTION_KEY não configurada no servidor")
+    _fernet()
     with tempfile.TemporaryDirectory(prefix="capacity-kubeconfig-") as temp_dir:
         path = Path(temp_dir) / "config"
         path.write_bytes(kubeconfig)

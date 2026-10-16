@@ -1,0 +1,24 @@
+services:
+  capacity-agent:
+    image: ${CAPACITY_AGENT_IMAGE:?Defina CAPACITY_AGENT_IMAGE com a tag da imagem}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      CAPACITY_AGENT_COOKIE_SECURE: "false"
+      CAPACITY_AGENT_PROVIDER: ${CAPACITY_AGENT_PROVIDER:-kubernetes}
+      CAPACITY_AGENT_STATE_DIR: /data/state
+      CAPACITY_AGENT_ACCOUNT_DB: /data/accounts.sqlite3
+    ports:
+      - "127.0.0.1:${CAPACITY_AGENT_PORT:-8080}:8080"
+    volumes:
+      - capacity-agent-data:/data
+
+volumes:
+  capacity-agent-data:

@@ -8,7 +8,8 @@ cluster connections and encrypts uploaded kubeconfigs at rest.
 
 Requirements: Docker Engine and the Docker Compose plugin.
 
-Create a local `.env` file (never commit it) and set a persistent Fernet key:
+For production, set a persistent Fernet key in a local `.env` file (never
+commit it):
 
 ```bash
 printf 'CAPACITY_AGENT_ENCRYPTION_KEY=%s\n' \
@@ -16,8 +17,10 @@ printf 'CAPACITY_AGENT_ENCRYPTION_KEY=%s\n' \
   > .env
 ```
 
-Keep this key safe and stable. Replacing or losing it makes stored kubeconfigs
-unreadable. Then start the application:
+If the key is omitted, the application generates one at
+`/data/encryption.key`; the Compose volume keeps it across restarts. Keep the
+key and database together when moving the installation to another environment.
+Replacing or losing the key makes stored kubeconfigs unreadable. Then start:
 
 ```bash
 docker compose up --build -d
@@ -51,3 +54,6 @@ depend on local exec plugins or external certificate files.
 
 See [docs/MULTI_TENANT.md](docs/MULTI_TENANT.md) for server configuration and
 cluster onboarding details.
+
+For a customer test deployment using a prebuilt image, follow
+[docs/IMPLANTACAO_CLIENTE_TESTE.md](docs/IMPLANTACAO_CLIENTE_TESTE.md).

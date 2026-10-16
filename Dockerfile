@@ -42,7 +42,9 @@ COPY executors/ ./executors/
 COPY reporters/ ./reporters/
 COPY web/ ./web/
 
-RUN mkdir -p /data && chown 10001:10001 /data
+RUN chmod -R a+rX /app \
+    && mkdir -p /data \
+    && chown 10001:10001 /data
 USER 10001:10001
 
 EXPOSE 8080
