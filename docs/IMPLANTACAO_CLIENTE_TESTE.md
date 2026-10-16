@@ -1,55 +1,69 @@
-# Instalar o Capacity Agent no servidor do cliente
+# Publicar atualizações e instalar o Capacity Agent no cliente
 
-Este guia é destinado ao administrador do servidor do cliente. Ao final, o
-painel estará disponível somente no próprio servidor ou por túnel SSH. Não
-publique a porta HTTP diretamente na internet.
+O fluxo usa GitHub Actions para testar e publicar uma imagem no GitHub Container
+Registry (GHCR) quando uma versão é marcada no Git. O cliente escolhe quando
+aplicar cada versão, executando um comando no servidor. A atualização preserva
+o volume com banco, chave de criptografia e kubeconfigs e tenta reverter a
+imagem automaticamente se o healthcheck falhar.
 
-## O que o fornecedor deve entregar
+## 1. Publicar uma nova versão (responsável pelo produto)
 
-O cliente precisa receber estes arquivos, todos da mesma versão:
+Faça merge das alterações aprovadas na branch principal e atualize sua cópia:
 
-- `capacity-agent-teste-2.tar`: imagem Docker pré-construída.
-- `compose.customer.yaml`: configuração de execução.
-- O SHA-256 de `capacity-agent-teste-2.tar`, enviado separadamente ou por um
-  canal confiável.
+```bash
+git switch main
+git pull --ff-only origin main
+```
 
-O cliente não precisa do código-fonte nem precisa construir a imagem. Não
-inclua no pacote `.env`, kubeconfigs, bancos de dados ou chaves de criptografia.
+Crie e envie uma tag SemVer nova. Exemplo para a versão `1.2.3`:
 
-## 1. Preparar o servidor
+```bash
+git tag -a v1.2.3 -m "Release 1.2.3"
+git push origin v1.2.3
+```
 
-Este procedimento assume um servidor Ubuntu ou Debian com acesso `sudo` e
-arquitetura compatível com a imagem recebida. A imagem de teste deste guia é
-`linux/amd64`. É necessário ter Docker Engine instalado.
+Não reutilize uma tag já publicada. O push da tag inicia a workflow **Publish
+container image**, que executa os testes focados e, se passarem, constrói
+imagens `linux/amd64` e `linux/arm64`, publica no GHCR com as tags `1.2.3`,
+`1.2` e `latest` e cria um GitHub Release com `compose.customer.yaml` e
+`update-customer.sh` anexados.
 
-Confirme que o daemon Docker está acessível:
+No GitHub, abra **Actions** e confirme que a execução terminou com sucesso.
+Depois confira o pacote de container em **Packages** e a página do release.
+Informe ao cliente a versão sem o `v` (neste exemplo, `1.2.3`). O cliente baixa
+os dois arquivos anexados ao release. Não envie imagem `.tar` nem código-fonte.
+
+### Acesso do cliente ao GHCR
+
+O pacote normalmente é privado. Antes da instalação, conceda ao cliente acesso
+de leitura ao pacote ou, se a política do produto permitir distribuição
+pública, altere a visibilidade do pacote para público nas configurações do
+GitHub Packages. Para pacote privado, o cliente precisa de um Personal Access
+Token (classic) com escopo `read:packages`, entregue por um canal seguro.
+Nunca coloque o token em um arquivo do projeto ou no comando do atualizador.
+
+## 2. Preparação inicial do servidor do cliente
+
+Este procedimento assume Ubuntu ou Debian, Docker Engine instalado, acesso
+administrativo `sudo`, arquitetura `amd64` ou `arm64` e acesso ao endpoint do
+cluster Kubernetes que será testado. Não exponha o painel HTTP diretamente à
+internet.
+
+Confirme Docker e Compose:
 
 ```bash
 sudo docker info
-```
-
-Confirme que o plugin Docker Compose v2 está instalado:
-
-```bash
 sudo docker compose version
 ```
 
-Se o comando mostrar uma versão `v2...`, siga para a seção 2. Se retornar
-`docker: unknown command: docker compose`, instale o plugin.
-
-### Instalar o plugin Compose v2 no Ubuntu/Debian
-
-O pacote chama-se `docker-compose-plugin` e é distribuído pelo repositório
-oficial do Docker. Não use `apt install docker compose`, `docker-composer` ou
-`docker composer`.
-
-Execute:
+Se `docker compose` não existir, instale o plugin Compose v2 pelo repositório
+oficial do Docker para a distribuição do servidor. No Ubuntu/Debian:
 
 ```bash
 . /etc/os-release
 case "$ID" in
   ubuntu|debian) ;;
-  *) echo "Este procedimento de instalação do Compose é para Ubuntu/Debian." >&2; exit 1 ;;
+  *) echo "Este trecho é para Ubuntu/Debian." >&2; exit 1 ;;
 esac
 DOCKER_CODENAME="${UBUNTU_CODENAME:-$VERSION_CODENAME}"
 
@@ -61,157 +75,115 @@ sudo curl -fsSL "https://download.docker.com/linux/$ID/gpg" \
 sudo chmod a+r /etc/apt/keyrings/docker.asc
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$ID $DOCKER_CODENAME stable" \
   | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
 sudo apt-get update
 sudo apt-get install -y docker-compose-plugin
 sudo docker compose version
 ```
 
-O último comando precisa mostrar a versão do Compose. Se o pacote não for
-encontrado, pare e confirme a versão/nome da distribuição; não tente instalar
-pacotes chamados `docker` ou `compose`. O comando `apt-get` precisa de `sudo`.
+O comando final precisa mostrar uma versão `v2...`. O pacote correto é
+`docker-compose-plugin`; `apt install docker compose` não instala Compose.
 
-## 2. Copiar e verificar o pacote
-
-Crie uma pasta exclusiva para esta instalação:
+Crie uma pasta para esta instalação e coloque nela os arquivos
+`compose.customer.yaml` e `update-customer.sh` fornecidos pelo responsável do
+produto, baixados dos anexos do release GitHub que corresponde à versão:
 
 ```bash
-sudo mkdir -p /opt/capacity-agent-teste
-sudo chown "$USER":"$(id -gn)" /opt/capacity-agent-teste
+sudo mkdir -p /opt/capacity-agent
+sudo chown "$USER":"$(id -gn)" /opt/capacity-agent
+cd /opt/capacity-agent
 ```
 
-Copie `capacity-agent-teste-2.tar` e `compose.customer.yaml` para essa pasta.
-Por exemplo, na máquina de onde os arquivos serão enviados:
+Para pacote privado, autentique-se no GHCR uma vez. O Docker pedirá o token sem
+que seja necessário digitá-lo como parte do comando:
 
 ```bash
-scp capacity-agent-teste-2.tar compose.customer.yaml \
-  usuario@servidor-do-cliente:/opt/capacity-agent-teste/
+sudo docker login ghcr.io --username <usuario-github>
 ```
 
-Substitua `usuario@servidor-do-cliente` pelo usuário e endereço SSH reais. No
-servidor, confirme que os dois arquivos chegaram e valide o hash fornecido:
+Quando solicitado, informe o Personal Access Token com `read:packages` no campo
+de senha. Não compartilhe nem registre o token em logs. Para um pacote público,
+esta etapa pode ser ignorada.
+
+Crie `.env` com o pacote e a versão inicial. Substitua `<VERSAO>` pela tag de
+release:
 
 ```bash
-cd /opt/capacity-agent-teste
-ls -lh capacity-agent-teste-2.tar compose.customer.yaml
-echo '<SHA256 recebido>  capacity-agent-teste-2.tar' | sha256sum --check -
+umask 077
+printf 'CAPACITY_AGENT_IMAGE=ghcr.io/eoliveiralorente/k8s-capacity-agent:<VERSAO>\n' > .env
 ```
 
-Substitua `<SHA256 recebido>` pelo valor enviado pelo fornecedor. Prossiga
-somente se aparecer `capacity-agent-teste-2.tar: OK`. Se o arquivo não existir,
-repita a cópia antes de continuar. Se o hash divergir, não carregue a imagem;
-solicite uma nova cópia ao fornecedor.
-
-Carregue a imagem e confira a tag:
+Exemplo:
 
 ```bash
-sudo docker load --input capacity-agent-teste-2.tar
-sudo docker image inspect capacity-agent:teste-2 \
-  --format '{{.Os}}/{{.Architecture}}'
+printf 'CAPACITY_AGENT_IMAGE=ghcr.io/eoliveiralorente/k8s-capacity-agent:1.2.3\n' > .env
 ```
 
-O resultado deve corresponder à arquitetura do servidor, por exemplo
-`linux/amd64`.
-
-## 3. Iniciar o painel
-
-Crie o arquivo `.env` com a tag entregue. Ele guarda somente a referência da
-imagem; não contém senhas nem a chave de criptografia:
+Baixe e inicie a imagem:
 
 ```bash
-cd /opt/capacity-agent-teste
-printf 'CAPACITY_AGENT_IMAGE=capacity-agent:teste-2\n' > .env
-```
-
-Valide a configuração e inicie:
-
-```bash
-sudo docker compose --env-file .env -p cliente-teste \
-  -f compose.customer.yaml config
-sudo docker compose --env-file .env -p cliente-teste \
+sudo docker compose --env-file .env -p cliente-capacity-agent \
+  -f compose.customer.yaml pull
+sudo docker compose --env-file .env -p cliente-capacity-agent \
   -f compose.customer.yaml up -d
-```
-
-O primeiro comando deve exibir a configuração sem erro; o segundo deve indicar
-que o container iniciou. Consulte o estado e os logs:
-
-```bash
-sudo docker compose --env-file .env -p cliente-teste \
+sudo docker compose --env-file .env -p cliente-capacity-agent \
   -f compose.customer.yaml ps
-sudo docker compose --env-file .env -p cliente-teste \
-  -f compose.customer.yaml logs --tail=100
-```
-
-Verifique se a aplicação responde:
-
-```bash
 curl --fail http://127.0.0.1:8080/
 ```
 
-O Compose publica a porta somente em `127.0.0.1`. Para acesso a partir da sua
-estação, mantenha um túnel SSH aberto:
+O painel deve responder em `http://127.0.0.1:8080` no servidor. Para acessá-lo
+de uma estação de trabalho, mantenha aberto um túnel SSH:
 
 ```bash
 ssh -L 8080:127.0.0.1:8080 usuario@servidor-do-cliente
 ```
 
-Depois abra [http://localhost:8080](http://localhost:8080) na estação. Crie a
-conta inicial e entre no painel.
+Abra `http://localhost:8080` na estação, crie a conta inicial e cadastre um
+kubeconfig autorizado para teste.
 
-## 4. Cadastrar um cluster para o teste
+## 3. Atualizar para uma nova versão (cliente)
 
-Na aba **Cluster**, envie um kubeconfig autorizado para o teste. O servidor
-precisa alcançar o endpoint da API Kubernetes informado nesse arquivo. Use
-credenciais de teste ou credenciais expressamente autorizadas pelo cliente.
-
-Não é necessário definir `CAPACITY_AGENT_ENCRYPTION_KEY`: na primeira execução,
-a aplicação gera uma chave e a armazena junto com o banco no volume Docker
-`cliente-teste_capacity-agent-data`.
-
-**Não remova esse volume nem altere o nome do projeto `cliente-teste`.** O volume
-guarda o banco, a chave de criptografia e os kubeconfigs cifrados. Perder o
-volume ou separar o banco da chave pode tornar os kubeconfigs irrecuperáveis.
-
-## 5. Parar, iniciar e remover
-
-Parar os containers sem apagar os dados:
+O responsável pelo produto informa a nova tag publicada (por exemplo, `1.2.4`).
+O script `update-customer.sh` instalado na seção 2 pode ser mantido entre
+versões; substitua-o somente se as notas do release informarem que ele mudou.
+No servidor, rode um único comando:
 
 ```bash
-sudo docker compose --env-file .env -p cliente-teste \
+cd /opt/capacity-agent
+bash update-customer.sh 1.2.4
+```
+
+O script baixa a versão do GHCR, atualiza apenas `CAPACITY_AGENT_IMAGE`, recria
+o container e espera o healthcheck por até 90 segundos. Se o download falhar ou
+o serviço não ficar saudável, tenta restaurar a imagem anterior e mostra os
+logs. Se o pacote for privado, o login GHCR precisa continuar válido.
+
+Use somente tags de release `MAJOR.MINOR.PATCH`, como `1.2.4`; não use `latest`
+para atualizar. A versão explícita permite saber exatamente o que foi
+implantado e facilita o rollback.
+
+## 4. Dados, parada e remoção
+
+O Compose mantém banco e chave de criptografia no volume Docker
+`cliente-capacity-agent_capacity-agent-data`. Preserve esse volume e o nome do
+projeto `cliente-capacity-agent` entre as reinicializações e atualizações. Não
+é necessário configurar `CAPACITY_AGENT_ENCRYPTION_KEY`: a aplicação cria e
+persiste a chave no volume.
+
+Para parar sem apagar os dados:
+
+```bash
+sudo docker compose --env-file .env -p cliente-capacity-agent \
   -f compose.customer.yaml down
 ```
 
-Iniciar novamente:
+Para iniciar novamente, use o comando `up -d` da seção 2. Para apagar
+definitivamente os dados, somente com autorização do cliente:
 
 ```bash
-sudo docker compose --env-file .env -p cliente-teste \
-  -f compose.customer.yaml up -d
-```
-
-Para remover definitivamente os dados do teste, obtenha autorização do cliente
-e então remova também o volume:
-
-```bash
-sudo docker compose --env-file .env -p cliente-teste \
+sudo docker compose --env-file .env -p cliente-capacity-agent \
   -f compose.customer.yaml down -v
 ```
 
-O comando `down -v` apaga o banco, a chave e os kubeconfigs armazenados. Não o
-use para uma simples parada ou atualização.
-
-## Atualizar para uma nova versão
-
-O fornecedor deve entregar uma nova imagem, com nova tag, arquivo `.tar` e
-SHA-256. Copie a imagem para `/opt/capacity-agent-teste`, valide o hash e
-carregue-a, por exemplo:
-
-```bash
-echo '<NOVO_SHA256>  capacity-agent-teste-3.tar' | sha256sum --check -
-sudo docker load --input capacity-agent-teste-3.tar
-printf 'CAPACITY_AGENT_IMAGE=capacity-agent:teste-3\n' > .env
-sudo docker compose --env-file .env -p cliente-teste \
-  -f compose.customer.yaml up -d
-```
-
-Mantenha o mesmo nome do projeto e o volume para preservar os dados entre
-versões.
+`down -v` apaga banco, chave e kubeconfigs cifrados. Não o use para atualizar
+nem para uma parada normal. Mantenha backup protegido do volume e teste a
+restauração.

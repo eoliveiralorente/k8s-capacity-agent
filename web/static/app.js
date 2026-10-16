@@ -12,6 +12,8 @@ const state = {
   podNamespace: "",
   podSearch: "",
   podRequestId: 0,
+  podLogTarget: null,
+  podLogRequestId: 0,
   recommendations: [],
   filterStatus: "",
   currentTab: "overview",
@@ -224,15 +226,26 @@ modalOverlay.addEventListener("click", (e) => {
 });
 
 function openModal(title, bodyHtml, footerHtml) {
+  openModalWithSize(title, bodyHtml, footerHtml, false);
+}
+
+function openModalWithSize(title, bodyHtml, footerHtml, wide) {
   document.getElementById("modal-title").textContent = title;
   document.getElementById("modal-body").innerHTML = bodyHtml;
   document.getElementById("modal-footer").innerHTML = footerHtml;
+  document.querySelector(".modal").classList.toggle("modal-wide", wide);
   modalOverlay.classList.remove("hidden");
 }
 
 function closeModal() {
   modalOverlay.classList.add("hidden");
+  state.podLogTarget = null;
+  document.querySelector(".modal").classList.remove("modal-wide");
 }
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !modalOverlay.classList.contains("hidden")) closeModal();
+});
 
 function recDetailHtml(rec) {
   const op = rec.operation || {};
@@ -854,7 +867,7 @@ function renderClusterPods() {
   const pods = state.pods.filter((pod) => !search || pod.name.toLowerCase().includes(search));
   count.textContent = `${pods.length} / ${state.podTotal}`;
   container.innerHTML = pods.length
-    ? `<table><thead><tr><th>Namespace</th><th>Nome</th><th>Ready</th><th>Status</th><th>Reinícios</th><th>Idade</th></tr></thead><tbody>${pods.map((pod) => {
+    ? `<table><thead><tr><th>Namespace</th><th>Nome</th><th>Ready</th><th>Status</th><th>Reinícios</th><th>Idade</th><th>Ações</th></tr></thead><tbody>${pods.map((pod) => {
         const statusClass = pod.status === "Running"
           ? "pod-status-running"
           : pod.status === "Completed"
@@ -867,9 +880,72 @@ function renderClusterPods() {
           <td><span class="pod-status ${statusClass}">${escapeHtml(pod.status)}</span></td>
           <td class="${pod.restarts ? "pod-restarts" : ""}">${pod.restarts}</td>
           <td>${formatAge(pod.created_at)}</td>
+          <td><button class="btn btn-ghost btn-sm" type="button"
+            data-pod-logs="${escapeHtml(pod.name)}"
+            data-pod-namespace="${escapeHtml(pod.namespace)}">Ver logs</button></td>
         </tr>`;
       }).join("")}</tbody></table>`
     : `<div class="empty-state"><p>${search ? "Nenhum pod corresponde à busca" : "Nenhum pod encontrado neste namespace"}</p></div>`;
+}
+
+function openPodLogs(pod) {
+  state.podLogTarget = {
+    namespace: pod.namespace,
+    name: pod.name,
+    containers: [...(pod.containers || []), ...(pod.init_containers || [])],
+    previous: false,
+  };
+  const target = state.podLogTarget;
+  const containerOptions = target.containers.length
+    ? target.containers.map((name, index) =>
+      `<option value="${escapeHtml(name)}">${escapeHtml(name)}${index >= (pod.containers || []).length ? " (init)" : ""}</option>`
+    ).join("")
+    : `<option value="">Container padrão</option>`;
+  openModalWithSize(
+    `Logs · ${pod.name}`,
+    `<p class="pod-log-context">${escapeHtml(pod.namespace)} · ${escapeHtml(pod.status)} · ${pod.restarts} reinício(s)</p>
+    <div class="pod-log-toolbar">
+      <label for="pod-log-container">Container</label>
+      <select id="pod-log-container">${containerOptions}</select>
+      <button class="btn btn-ghost btn-sm" type="button" data-pod-log-toggle-previous>Ver logs anteriores</button>
+      <button class="btn btn-primary btn-sm" type="button" data-pod-log-refresh>Atualizar logs</button>
+    </div>
+    <p class="pod-log-hint" id="pod-log-status">Buscando as últimas linhas...</p>
+    <pre class="pod-log-output" id="pod-log-output" aria-live="polite"></pre>
+    <p class="pod-log-security-hint">Os logs podem conter dados sensíveis. A exibição é limitada às últimas 200 linhas e 256 KB.</p>`,
+    `<button class="btn btn-ghost" type="button" id="pod-log-close">Fechar</button>`,
+    true,
+  );
+  document.getElementById("pod-log-close").addEventListener("click", closeModal);
+  loadPodLogs();
+}
+
+async function loadPodLogs() {
+  const target = state.podLogTarget;
+  if (!target) return;
+  const requestId = ++state.podLogRequestId;
+  const status = document.getElementById("pod-log-status");
+  const output = document.getElementById("pod-log-output");
+  const container = document.getElementById("pod-log-container")?.value || "";
+  status.textContent = "Buscando as últimas linhas...";
+  output.textContent = "";
+  const query = new URLSearchParams({
+    namespace: target.namespace,
+    pod: target.name,
+    previous: String(target.previous),
+  });
+  if (container) query.set("container", container);
+  try {
+    const result = await API.get(`/cluster/pod-logs?${query.toString()}`);
+    if (requestId !== state.podLogRequestId || target !== state.podLogTarget) return;
+    output.textContent = result.logs || "(O pod não gerou logs para esta consulta.)";
+    status.textContent = result.truncated
+      ? "Exibindo até 200 linhas ou 256 KB. O resultado pode estar truncado."
+      : `${target.previous ? "Logs da execução anterior" : "Logs atuais"} · máximo de 200 linhas`;
+  } catch (error) {
+    if (requestId !== state.podLogRequestId || target !== state.podLogTarget) return;
+    status.textContent = `Não foi possível carregar os logs: ${error.message}`;
+  }
 }
 
 // ── Data loading ────────────────────────────────────────────
@@ -1015,6 +1091,32 @@ document.getElementById("pod-namespace-filter").addEventListener("change", async
 document.getElementById("pod-name-search").addEventListener("input", (event) => {
   state.podSearch = event.currentTarget.value;
   renderClusterPods();
+});
+
+document.getElementById("cluster-pods").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-pod-logs]");
+  if (!button) return;
+  const pod = state.pods.find(
+    (item) => item.namespace === button.dataset.podNamespace && item.name === button.dataset.podLogs,
+  );
+  if (pod) openPodLogs(pod);
+});
+
+document.getElementById("modal-body").addEventListener("change", (event) => {
+  if (event.target.id === "pod-log-container") loadPodLogs();
+});
+
+document.getElementById("modal-body").addEventListener("click", (event) => {
+  if (event.target.closest("[data-pod-log-refresh]")) {
+    loadPodLogs();
+    return;
+  }
+  if (event.target.closest("[data-pod-log-toggle-previous]") && state.podLogTarget) {
+    state.podLogTarget.previous = !state.podLogTarget.previous;
+    event.target.closest("[data-pod-log-toggle-previous]").textContent =
+      state.podLogTarget.previous ? "Ver logs atuais" : "Ver logs anteriores";
+    loadPodLogs();
+  }
 });
 
 document.getElementById("cluster-form").addEventListener("submit", async (event) => {

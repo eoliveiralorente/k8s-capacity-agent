@@ -3,6 +3,8 @@
 Web dashboard and CLI for Kubernetes capacity analysis, scheduling insights,
 and operational recommendations. The application supports account-scoped
 cluster connections and encrypts uploaded kubeconfigs at rest.
+On the **Cluster** page, operators can inspect recent pod logs and, when
+available, logs from the previous container instance.
 
 ## Run with Docker Compose
 
@@ -55,5 +57,8 @@ depend on local exec plugins or external certificate files.
 See [docs/MULTI_TENANT.md](docs/MULTI_TENANT.md) for server configuration and
 cluster onboarding details.
 
-For a customer test deployment using a prebuilt image, follow
+For customer image releases and one-command updates, follow
 [docs/IMPLANTACAO_CLIENTE_TESTE.md](docs/IMPLANTACAO_CLIENTE_TESTE.md).
+Pushing a version tag such as `v1.2.3` runs the release workflow, tests the
+application, publishes a multi-architecture image to GHCR, and attaches the
+customer deployment files to the GitHub Release.

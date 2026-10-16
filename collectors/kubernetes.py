@@ -158,6 +158,16 @@ def get_cluster_pods():
         pods.append({
             "namespace": metadata.get("namespace", "default"),
             "name": metadata.get("name", ""),
+            "containers": [
+                container.get("name", "")
+                for container in spec.get("containers", [])
+                if container.get("name")
+            ],
+            "init_containers": [
+                container.get("name", "")
+                for container in spec.get("initContainers", [])
+                if container.get("name")
+            ],
             "ready": (
                 f"{sum(bool(container.get('ready')) for container in container_statuses)}"
                 f"/{len(spec.get('containers', []))}"
@@ -171,6 +181,36 @@ def get_cluster_pods():
         })
 
     return pods
+
+
+def get_cluster_pod_logs(namespace, pod_name, container=None, previous=False):
+    command = [
+        "kubectl", "logs", pod_name,
+        "--namespace", namespace,
+        "--tail=200",
+        "--limit-bytes=262144",
+        "--timestamps",
+    ]
+    if container:
+        command.extend(["--container", container])
+    if previous:
+        command.append("--previous")
+
+    try:
+        result = _run_process(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("Tempo esgotado ao buscar os logs do pod") from exc
+
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "Não foi possível consultar os logs do pod"
+        raise RuntimeError(detail[:1000])
+
+    return result.stdout
 
 
 def get_cluster_events():

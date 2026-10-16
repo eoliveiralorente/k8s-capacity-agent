@@ -40,7 +40,11 @@ from config import (
     REGION,
     REQUIRE_APPROVAL,
 )
-from collectors.kubernetes import get_cluster_overview, get_cluster_pods
+from collectors.kubernetes import (
+    get_cluster_overview,
+    get_cluster_pod_logs,
+    get_cluster_pods,
+)
 from engine.evaluation import ensure_stability, run_evaluation, summarize_report_for_api
 from executors.gke import execute_operation
 from reporters.executive import build_executive_report
@@ -253,6 +257,43 @@ def api_cluster_pods(namespace: str | None = None):
         "namespaces": namespaces,
         "total": len(filtered_pods),
         "namespace": namespace,
+    }
+
+
+@app.get("/api/cluster/pod-logs")
+def api_cluster_pod_logs(
+    namespace: str,
+    pod: str,
+    container: str | None = None,
+    previous: bool = False,
+):
+    if not current_cluster_id.get():
+        raise HTTPException(status_code=409, detail="Cadastre ou selecione um cluster")
+    if not re.fullmatch(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?", namespace) or len(namespace) > 63:
+        raise HTTPException(status_code=422, detail="Namespace Kubernetes inválido")
+    if (
+        len(pod) > 253
+        or not re.fullmatch(r"[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?", pod)
+    ):
+        raise HTTPException(status_code=422, detail="Nome de pod Kubernetes inválido")
+    if container and (
+        len(container) > 63
+        or not re.fullmatch(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?", container)
+    ):
+        raise HTTPException(status_code=422, detail="Nome de container Kubernetes inválido")
+
+    try:
+        logs = get_cluster_pod_logs(namespace, pod, container, previous)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=f"Falha ao consultar logs: {exc}") from exc
+
+    return {
+        "namespace": namespace,
+        "pod": pod,
+        "container": container,
+        "previous": previous,
+        "logs": logs,
+        "truncated": len(logs.encode("utf-8")) >= 262_144,
     }
 
 

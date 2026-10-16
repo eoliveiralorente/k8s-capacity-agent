@@ -40,6 +40,13 @@ como `false` enquanto o servidor escuta em `127.0.0.1`.
 4. Selecione o cluster no menu **Cluster ativo**; os dados de operação ficam
    separados por empresa e cluster.
 
+Na lista **Pods**, use **Ver logs** para consultar as últimas 200 linhas (até
+256 KB) do container selecionado. Para diagnosticar reinícios, também é possível
+alternar para os logs da execução anterior. O kubeconfig precisa ter permissão
+`list` em `pods` para a listagem e `get` em `pods/log` nos namespaces
+consultados; conceda somente o acesso necessário. Logs podem conter dados
+sensíveis.
+
 Os kubeconfigs são cifrados no SQLite. O arquivo temporário de validação tem
 permissões restritas e é removido ao terminar a consulta. Kubeconfigs que usam
 plugins `exec`, arquivos de certificado externos ou `auth-provider` são

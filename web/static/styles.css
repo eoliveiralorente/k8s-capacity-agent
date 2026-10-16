@@ -556,6 +556,11 @@ tr:hover td { background: var(--bg-hover); }
   box-shadow: var(--shadow);
 }
 
+.modal.modal-wide {
+  width: min(1000px, calc(100vw - 32px));
+  max-width: none;
+}
+
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -576,6 +581,52 @@ tr:hover td { background: var(--bg-hover); }
 }
 
 .modal-body { padding: 20px 24px; }
+
+.pod-log-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pod-log-toolbar label,
+.pod-log-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.pod-log-toolbar select {
+  min-width: 180px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+.pod-log-hint { margin: 14px 0 8px; }
+.pod-log-context, .pod-log-security-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.pod-log-context { margin-bottom: 14px; }
+.pod-log-security-hint { margin-top: 10px; }
+
+.pod-log-output {
+  min-height: 260px;
+  max-height: 60vh;
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: 12px/1.55 var(--font-mono, monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 .modal-footer {
   padding: 16px 24px;
@@ -1052,4 +1103,8 @@ tr:hover td { background: var(--bg-hover); }
   .pod-filters { width: 100%; }
   .pod-filters select, .pod-filters input { flex: 1 1 100%; min-width: 0; width: 100%; }
   .pod-count { margin-left: auto; }
+  .modal.modal-wide { width: calc(100vw - 20px); }
+  .modal-wide .modal-header, .modal-wide .modal-body, .modal-wide .modal-footer { padding: 16px; }
+  .pod-log-toolbar > * { flex: 1 1 100%; }
+  .pod-log-toolbar select { min-width: 0; }
 }
