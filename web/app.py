@@ -1,9 +1,10 @@
+import hashlib
 import os
 import re
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -462,8 +463,20 @@ def relatorio_page():
 
 @app.get("/")
 def index():
-
-    return FileResponse(STATIC_DIR / "index.html")
+    app_script = STATIC_DIR / "app.js"
+    stylesheet = STATIC_DIR / "styles.css"
+    version_hash = hashlib.sha256(
+        app_script.read_bytes() + stylesheet.read_bytes()
+    ).hexdigest()[:12]
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    html = html.replace(
+        "/static/styles.css",
+        f"/static/styles.css?v={version_hash}",
+    ).replace(
+        "/static/app.js",
+        f"/static/app.js?v={version_hash}",
+    )
+    return HTMLResponse(html)
 
 
 if STATIC_DIR.is_dir():
