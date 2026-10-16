@@ -98,6 +98,16 @@ app = FastAPI(
 app.add_middleware(TenantAuthenticationMiddleware)
 
 
+@app.middleware("http")
+async def disable_dashboard_asset_caching(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path in {"/", "/static/app.js", "/static/styles.css"}:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 @app.on_event("startup")
 def startup():
     initialize_database()

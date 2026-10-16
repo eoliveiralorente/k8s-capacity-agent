@@ -405,6 +405,18 @@ td {
 tr:last-child td { border-bottom: none; }
 tr:hover td { background: var(--bg-hover); }
 
+.pod-name-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 260px;
+}
+
+.pod-name-cell .mono {
+  overflow-wrap: anywhere;
+}
+
 /* Badges */
 .badge {
   display: inline-block;

@@ -867,7 +867,7 @@ function renderClusterPods() {
   const pods = state.pods.filter((pod) => !search || pod.name.toLowerCase().includes(search));
   count.textContent = `${pods.length} / ${state.podTotal}`;
   container.innerHTML = pods.length
-    ? `<table><thead><tr><th>Namespace</th><th>Nome</th><th>Ready</th><th>Status</th><th>Reinícios</th><th>Idade</th><th>Ações</th></tr></thead><tbody>${pods.map((pod) => {
+    ? `<table><thead><tr><th>Namespace</th><th>Pod</th><th>Ready</th><th>Status</th><th>Reinícios</th><th>Idade</th></tr></thead><tbody>${pods.map((pod) => {
         const statusClass = pod.status === "Running"
           ? "pod-status-running"
           : pod.status === "Completed"
@@ -875,14 +875,17 @@ function renderClusterPods() {
             : "pod-status-attention";
         return `<tr>
           <td>${escapeHtml(pod.namespace)}</td>
-          <td class="mono">${escapeHtml(pod.name)}</td>
+          <td><div class="pod-name-cell">
+            <span class="mono">${escapeHtml(pod.name)}</span>
+            <button class="btn btn-primary btn-sm" type="button"
+              data-pod-logs="${escapeHtml(pod.name)}"
+              data-pod-namespace="${escapeHtml(pod.namespace)}"
+              aria-label="Ver logs do pod ${escapeHtml(pod.name)}">Ver logs</button>
+          </div></td>
           <td>${escapeHtml(pod.ready)}</td>
           <td><span class="pod-status ${statusClass}">${escapeHtml(pod.status)}</span></td>
           <td class="${pod.restarts ? "pod-restarts" : ""}">${pod.restarts}</td>
           <td>${formatAge(pod.created_at)}</td>
-          <td><button class="btn btn-ghost btn-sm" type="button"
-            data-pod-logs="${escapeHtml(pod.name)}"
-            data-pod-namespace="${escapeHtml(pod.namespace)}">Ver logs</button></td>
         </tr>`;
       }).join("")}</tbody></table>`
     : `<div class="empty-state"><p>${search ? "Nenhum pod corresponde à busca" : "Nenhum pod encontrado neste namespace"}</p></div>`;
