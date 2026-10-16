@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Relatório Executivo — Capacity Agent</title>
+  <link rel="stylesheet" href="/static/relatorio.css">
+</head>
+<body>
+  <div class="toolbar no-print">
+    <div class="toolbar-left">
+      <a href="/" class="btn-back">← Dashboard DevOps</a>
+      <select id="report-select" class="report-select"></select>
+    </div>
+    <div class="toolbar-right">
+      <button class="btn btn-ghost" id="btn-refresh">Atualizar</button>
+      <button class="btn btn-primary" id="btn-print">Exportar PDF / Imprimir</button>
+    </div>
+  </div>
+
+  <article class="report" id="report">
+    <div class="loading" id="loading">Carregando relatório...</div>
+  </article>
+
+  <script src="/static/relatorio.js"></script>
+</body>
+</html>

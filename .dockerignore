@@ -1,0 +1,15 @@
+.capacity-agent/
+.capacity-agent-*/
+.venv/
+aws/
+awscliv2.zip
+__pycache__/
+**/__pycache__/
+.git/
+.env
+*.py[cod]
+*.bak
+*.bkp*
+*.zip
+test_*.py
+docs/

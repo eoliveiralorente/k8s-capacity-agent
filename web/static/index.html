@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Capacity Agent — Dashboard DevOps</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="auth-screen" id="auth-screen">
+    <div class="auth-heading">
+      <div class="brand-icon">CA</div>
+      <div>
+        <p class="auth-eyebrow">CAPACITY AGENT</p>
+        <h1>Acesso ao ambiente</h1>
+      </div>
+    </div>
+    <div class="auth-panel">
+      <div class="auth-tabs">
+        <button class="auth-tab active" type="button" data-auth-view="login">Entrar</button>
+        <button class="auth-tab" type="button" data-auth-view="register">Criar conta</button>
+      </div>
+      <form id="login-form" class="auth-form">
+        <div class="form-group">
+          <label for="login-email">E-mail</label>
+          <input id="login-email" name="email" type="email" autocomplete="username" required>
+        </div>
+        <div class="form-group">
+          <label for="login-password">Senha</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn btn-primary auth-submit" type="submit">Entrar</button>
+      </form>
+      <form id="register-form" class="auth-form hidden">
+        <div class="form-group">
+          <label for="register-company">Empresa</label>
+          <input id="register-company" name="company_name" maxlength="120" autocomplete="organization" required>
+        </div>
+        <div class="form-group">
+          <label for="register-name">Seu nome</label>
+          <input id="register-name" name="full_name" maxlength="120" autocomplete="name" required>
+        </div>
+        <div class="form-group">
+          <label for="register-email">E-mail</label>
+          <input id="register-email" name="email" type="email" autocomplete="email" required>
+        </div>
+        <div class="form-group">
+          <label for="register-password">Senha (mínimo 12 caracteres)</label>
+          <input id="register-password" name="password" type="password" minlength="12" autocomplete="new-password" required>
+        </div>
+        <button class="btn btn-primary auth-submit" type="submit">Criar conta da empresa</button>
+      </form>
+      <p class="auth-feedback" id="auth-feedback" role="status"></p>
+    </div>
+  </main>
+
+  <div class="layout hidden" id="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">CA</div>
+        <div>
+          <h1>Capacity Agent</h1>
+          <p class="company-name" id="company-name">—</p>
+          <p id="cluster-name">Cluster não selecionado</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-tab="overview">Visão Geral</button>
+        <button class="nav-item" data-tab="cluster">Cluster</button>
+        <button class="nav-item" data-tab="recommendations">Recomendações</button>
+        <button class="nav-item" data-tab="capacity">Capacity</button>
+        <button class="nav-item" data-tab="scheduling">Scheduling</button>
+        <button class="nav-item" data-tab="audit">Auditoria</button>
+        <a class="nav-item nav-link" href="/relatorio" target="_blank">Relatório Gerencial ↗</a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="gate-badge" id="gate-badge">
+          <span class="dot"></span>
+          Gate DevOps ativo
+        </div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <h2 id="page-title">Visão Geral</h2>
+          <p id="page-subtitle">Monitoramento e aprovação de alterações no cluster</p>
+        </div>
+        <div class="cluster-switcher">
+          <span class="header-company" id="header-company">—</span>
+          <label for="cluster-selector">Cluster ativo</label>
+          <select id="cluster-selector" aria-label="Selecionar cluster ativo">
+            <option value="">Nenhum cluster</option>
+          </select>
+        </div>
+        <div class="topbar-actions">
+          <span class="last-update" id="last-update">—</span>
+          <button class="btn btn-ghost" id="btn-logout" type="button">Sair</button>
+          <button class="btn btn-primary" id="btn-evaluate">
+            <span class="btn-spinner hidden" id="evaluate-spinner"></span>
+            Nova Avaliação
+          </button>
+        </div>
+      </header>
+
+      <div id="toast-container"></div>
+
+      <!-- OVERVIEW -->
+      <section class="tab-panel active" id="tab-overview">
+        <div class="cards" id="overview-cards"></div>
+        <div class="panel overview-connection" id="overview-connection"></div>
+
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>Health Checks</h3>
+            </div>
+            <div class="panel-body" id="health-checks"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h3>Gate de Decisão</h3>
+            </div>
+            <div class="panel-body" id="decision-panel"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Recomendações Pendentes</h3>
+            <button class="btn btn-ghost btn-sm" data-goto="recommendations">Ver todas</button>
+          </div>
+          <div class="panel-body" id="pending-preview"></div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="tab-cluster">
+        <div class="panel cluster-settings-panel">
+          <div class="panel-header">
+            <h3>Conexões da empresa</h3>
+          </div>
+          <form id="cluster-form" class="cluster-form">
+            <div class="form-group">
+              <label for="cluster-display-name">Nome para identificar</label>
+              <input id="cluster-display-name" name="name" maxlength="100" placeholder="Ex.: Produção" required>
+            </div>
+            <div class="form-group">
+              <label for="cluster-kubeconfig">Arquivo kubeconfig</label>
+              <input id="cluster-kubeconfig" name="kubeconfig" type="file" accept=".yaml,.yml,.config,text/yaml,application/yaml" required>
+            </div>
+            <div class="cluster-form-actions">
+              <span class="form-hint">Arquivo validado antes de ser protegido e armazenado.</span>
+              <button class="btn btn-primary" type="submit">Conectar cluster</button>
+            </div>
+          </form>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Nodes do cluster</h3>
+            <div class="cluster-actions">
+              <button class="btn btn-ghost btn-sm" id="btn-refresh-cluster" type="button">Atualizar dados</button>
+              <button class="btn btn-danger btn-sm" id="btn-delete-cluster" type="button">Remover conexão</button>
+            </div>
+          </div>
+          <div class="panel-body" id="cluster-connection"></div>
+          <div class="panel-body table-wrap" id="cluster-nodes"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header pod-panel-header">
+            <h3>Pods</h3>
+            <div class="pod-filters">
+              <label for="pod-namespace-filter">Namespace</label>
+              <select id="pod-namespace-filter">
+                <option value="">Todos os namespaces</option>
+              </select>
+              <label class="visually-hidden" for="pod-name-search">Buscar pod</label>
+              <input id="pod-name-search" type="search" placeholder="Buscar pod..." autocomplete="off">
+              <span class="pod-count" id="pod-count">—</span>
+            </div>
+          </div>
+          <div class="panel-body table-wrap" id="cluster-pods"></div>
+        </div>
+      </section>
+
+      <!-- RECOMMENDATIONS -->
+      <section class="tab-panel" id="tab-recommendations">
+        <div class="filters">
+          <button class="filter-btn active" data-status="">Todas</button>
+          <button class="filter-btn" data-status="pending">Pendentes</button>
+          <button class="filter-btn" data-status="approved">Aprovadas</button>
+          <button class="filter-btn" data-status="rejected">Rejeitadas</button>
+          <button class="filter-btn" data-status="executed">Executadas</button>
+        </div>
+        <div class="panel">
+          <div class="panel-body table-wrap" id="recommendations-table"></div>
+        </div>
+      </section>
+
+      <!-- CAPACITY -->
+      <section class="tab-panel" id="tab-capacity">
+        <div class="panel capacity-legend-panel">
+          <div class="panel-header">
+            <h3>Legenda das Métricas</h3>
+          </div>
+          <div class="panel-body">
+            <p class="capacity-legend-intro">
+              Cada barra mostra a porcentagem em relação à capacidade
+              <strong>allocatable</strong> dos nodes do pool (recursos
+              disponíveis para pods, após reservas do sistema).
+            </p>
+
+            <div class="capacity-legend-grid">
+              <div class="legend-item">
+                <div class="legend-item-header">
+                  <span class="legend-dot usage"></span>
+                  <strong>CPU Usage</strong>
+                  <span class="legend-tag">consumo real</span>
+                </div>
+                <p>
+                  CPU efetivamente consumida pelos pods, medida pelo
+                  <em>metrics-server</em> (<code>kubectl top</code>).
+                  Reflete o uso atual do pool — quanto processamento está
+                  sendo utilizado neste momento.
+                </p>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-item-header">
+                  <span class="legend-dot request"></span>
+                  <strong>CPU Requests</strong>
+                  <span class="legend-tag">reserva do scheduler</span>
+                </div>
+                <p>
+                  Soma dos <code>resources.requests.cpu</code> declarados
+                  nos pods. É a capacidade que o scheduler reserva para
+                  garantir placement. Alto request com baixo usage indica
+                  superprovisionamento.
+                </p>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-item-header">
+                  <span class="legend-dot usage"></span>
+                  <strong>Mem Usage</strong>
+                  <span class="legend-tag">consumo real</span>
+                </div>
+                <p>
+                  Memória (RAM) efetivamente consumida pelos pods, medida
+                  pelo <em>metrics-server</em>. Mostra pressão real de
+                  memória no pool — diferente do que foi reservado.
+                </p>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-item-header">
+                  <span class="legend-dot request"></span>
+                  <strong>Mem Requests</strong>
+                  <span class="legend-tag">reserva do scheduler</span>
+                </div>
+                <p>
+                  Soma dos <code>resources.requests.memory</code> declarados
+                  nos pods. O scheduler usa esse valor para decidir se cabe
+                  um novo pod. Pool com requests altos pode rejeitar pods
+                  mesmo com usage baixo.
+                </p>
+              </div>
+            </div>
+
+            <div class="capacity-legend-summary">
+              <strong>Usage vs Request:</strong>
+              <em>Usage</em> é o que o pool consome agora;
+              <em>Request</em> é o que foi reservado no agendamento.
+              Compare os dois para identificar superprovisionamento
+              (request alto, usage baixo) ou risco de pressão
+              (usage ou request próximos de 100%).
+            </div>
+
+            <div class="capacity-threshold-legend">
+              <span class="threshold-label">Níveis das barras:</span>
+              <span class="threshold-item"><span class="threshold-dot ok"></span> &lt; 70% — normal</span>
+              <span class="threshold-item"><span class="threshold-dot warn"></span> 70–84% — atenção</span>
+              <span class="threshold-item"><span class="threshold-dot bad"></span> ≥ 85% — pressão</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Utilização por Node Pool</h3>
+            <span class="panel-hint" id="capacity-eval-time"></span>
+          </div>
+          <div class="panel-body table-wrap" id="capacity-table"></div>
+        </div>
+      </section>
+
+      <!-- SCHEDULING -->
+      <section class="tab-panel" id="tab-scheduling">
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-header"><h3>Causas</h3></div>
+            <div class="panel-body" id="scheduling-causes"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <h3>Namespaces Impactados</h3>
+              <span class="panel-hint">Clique para ver os pods</span>
+            </div>
+            <div class="panel-body" id="scheduling-namespaces"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <h3 id="scheduling-pods-title">Pods com Problema</h3>
+            <button class="btn btn-ghost btn-sm hidden" id="scheduling-clear-filter">Ver todos</button>
+          </div>
+          <div class="panel-body table-wrap" id="scheduling-pods"></div>
+        </div>
+      </section>
+
+      <!-- AUDIT -->
+      <section class="tab-panel" id="tab-audit">
+        <div class="panel">
+          <div class="panel-header"><h3>Log de Auditoria</h3></div>
+          <div class="panel-body" id="audit-log"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL -->
+  <div class="modal-overlay hidden" id="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title">—</h3>
+        <button class="modal-close" id="modal-close">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer" id="modal-footer"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
