@@ -18,6 +18,10 @@ POLICY = [
     ("POST", r"/api/recommendations/[^/]+/(approve|reject)", "operador"),
     ("POST", r"/api/recommendations/[^/]+/execute", "operador"),  # execução real exige admin no endpoint
     ("GET", r"/api/cluster/pod-logs", "operador"),  # logs podem conter dados sensíveis
+    ("GET", r"/api/users", "admin"),
+    ("POST", r"/api/invites", "admin"),
+    ("PATCH", r"/api/users/[^/]+", "admin"),
+    ("DELETE", r"/api/users/[^/]+", "admin"),
 ]
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}

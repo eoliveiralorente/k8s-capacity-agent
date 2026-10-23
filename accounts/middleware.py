@@ -14,7 +14,7 @@ from tenant_context import (
 )
 
 
-PUBLIC_API_PATHS = {"/api/auth/register", "/api/auth/login"}
+PUBLIC_API_PATHS = {"/api/auth/register", "/api/auth/login", "/api/auth/accept-invite"}
 PUBLIC_PATHS = {"/", "/favicon.ico"}
 
 

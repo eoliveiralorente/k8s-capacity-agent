@@ -67,6 +67,17 @@ def initialize_database():
             );
             CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id);
             CREATE INDEX IF NOT EXISTS clusters_tenant_idx ON clusters(tenant_id);
+            CREATE TABLE IF NOT EXISTS invites (
+                token_hash TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                role TEXT NOT NULL,
+                email TEXT,
+                created_by TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                used_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS invites_tenant_idx ON invites(tenant_id);
             """
         )
         # Migração RBAC: contas existentes viram admin.
@@ -357,3 +368,132 @@ def list_companies():
             "SELECT id, company_name, created_at FROM tenants ORDER BY created_at"
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+
+# ── Usuários e convites (RBAC) ─────────────────────────────────
+
+INVITE_TTL_DAYS = 7
+VALID_ROLES = ("leitor", "operador", "admin")
+
+
+class InviteError(ValueError):
+    pass
+
+
+class LastAdminError(ValueError):
+    pass
+
+
+def _hash_token(token):
+    return hashlib.sha256(token.encode("ascii", errors="ignore")).hexdigest()
+
+
+def create_invite(tenant_id, role, created_by, email=None):
+    if role not in VALID_ROLES:
+        raise InviteError("Papel inválido")
+    initialize_database()
+    token = secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc)
+    expires_at = (now + timedelta(days=INVITE_TTL_DAYS)).isoformat()
+    with _connect() as connection:
+        connection.execute(
+            "INSERT INTO invites(token_hash, tenant_id, role, email, created_by, created_at, expires_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (_hash_token(token), tenant_id, role, (email or "").strip().lower() or None,
+             created_by, now.isoformat(), expires_at),
+        )
+    return token, expires_at
+
+
+def accept_invite(token, full_name, email, password):
+    initialize_database()
+    email = email.strip().lower()
+    now = datetime.now(timezone.utc).isoformat()
+    token_hash = _hash_token(token or "")
+    with _connect() as connection:
+        invite = connection.execute(
+            "SELECT invites.*, tenants.company_name FROM invites "
+            "JOIN tenants ON tenants.id = invites.tenant_id WHERE token_hash = ?",
+            (token_hash,),
+        ).fetchone()
+        if invite is None or invite["used_at"] or invite["expires_at"] <= now:
+            raise InviteError("Convite inválido, expirado ou já utilizado")
+        if invite["email"] and invite["email"] != email:
+            raise InviteError("Este convite foi emitido para outro e-mail")
+        user_id = uuid.uuid4().hex
+        try:
+            connection.execute(
+                "INSERT INTO users(id, tenant_id, full_name, email, password_hash, created_at, role) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (user_id, invite["tenant_id"], full_name.strip(), email,
+                 _hash_password(password), now, invite["role"]),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise DuplicateAccountError("Já existe uma conta com esse e-mail") from exc
+        connection.execute("UPDATE invites SET used_at = ? WHERE token_hash = ?", (now, token_hash))
+    return {"id": user_id, "tenant_id": invite["tenant_id"], "full_name": full_name.strip(),
+            "email": email, "company_name": invite["company_name"], "role": invite["role"]}
+
+
+def list_users(tenant_id):
+    initialize_database()
+    with _connect() as connection:
+        rows = connection.execute(
+            "SELECT id, full_name, email, role, created_at FROM users WHERE tenant_id = ? "
+            "ORDER BY created_at",
+            (tenant_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def list_invites(tenant_id):
+    initialize_database()
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as connection:
+        rows = connection.execute(
+            "SELECT role, email, created_by, created_at, expires_at FROM invites "
+            "WHERE tenant_id = ? AND used_at IS NULL AND expires_at > ? ORDER BY created_at DESC",
+            (tenant_id, now),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _admin_count(connection, tenant_id):
+    return connection.execute(
+        "SELECT COUNT(*) FROM users WHERE tenant_id = ? AND role = 'admin'", (tenant_id,)
+    ).fetchone()[0]
+
+
+def set_user_role(tenant_id, user_id, role):
+    if role not in VALID_ROLES:
+        raise InviteError("Papel inválido")
+    initialize_database()
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT role FROM users WHERE id = ? AND tenant_id = ?", (user_id, tenant_id)
+        ).fetchone()
+        if row is None:
+            return False
+        if row["role"] == "admin" and role != "admin" and _admin_count(connection, tenant_id) <= 1:
+            raise LastAdminError("A empresa precisa manter pelo menos um admin")
+        connection.execute(
+            "UPDATE users SET role = ? WHERE id = ? AND tenant_id = ?", (role, user_id, tenant_id)
+        )
+        # Papel mudou: encerra sessões para valer imediatamente.
+        connection.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+    return True
+
+
+def delete_user(tenant_id, user_id):
+    initialize_database()
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT role FROM users WHERE id = ? AND tenant_id = ?", (user_id, tenant_id)
+        ).fetchone()
+        if row is None:
+            return False
+        if row["role"] == "admin" and _admin_count(connection, tenant_id) <= 1:
+            raise LastAdminError("A empresa precisa manter pelo menos um admin")
+        connection.execute("DELETE FROM users WHERE id = ? AND tenant_id = ?", (user_id, tenant_id))
+    return True

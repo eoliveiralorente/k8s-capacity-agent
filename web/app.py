@@ -13,7 +13,15 @@ from accounts.middleware import TenantAuthenticationMiddleware
 from accounts.store import (
     DuplicateAccountError,
     DuplicateClusterError,
+    InviteError,
+    LastAdminError,
+    accept_invite,
     authenticate,
+    create_invite,
+    delete_user,
+    list_invites,
+    list_users,
+    set_user_role,
     create_cluster,
     create_session,
     delete_cluster,
@@ -32,7 +40,7 @@ from approval.gate import (
     mark_executed,
     reject,
 )
-from approval.store import list_reports, load_audit, load_latest_report, load_report
+from approval.store import append_audit, list_reports, load_audit, load_latest_report, load_report
 from config import (
     AUTO_EXECUTE,
     CLUSTER,
@@ -93,6 +101,22 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=256)
+
+
+class AcceptInviteRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+    full_name: str = Field(min_length=2, max_length=120)
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=12, max_length=256)
+
+
+class InviteRequest(BaseModel):
+    role: str = Field(pattern="^(leitor|operador|admin)$")
+    email: str | None = Field(default=None, max_length=254)
+
+
+class RoleRequest(BaseModel):
+    role: str = Field(pattern="^(leitor|operador|admin)$")
 
 
 class ClusterRequest(BaseModel):
@@ -184,6 +208,72 @@ def api_login(body: LoginRequest, request: Request, response: Response):
     token, _ = create_session(user["id"])
     _set_session_cookie(response, token)
     return user
+
+
+@app.post("/api/auth/accept-invite")
+def api_accept_invite(body: AcceptInviteRequest, response: Response):
+    email = body.email.strip().lower()
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        raise HTTPException(status_code=422, detail="Informe um e-mail válido")
+    try:
+        user = accept_invite(body.token, body.full_name, email, body.password)
+    except DuplicateAccountError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except InviteError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    token, _ = create_session(user["id"])
+    _set_session_cookie(response, token)
+    return user
+
+
+@app.get("/api/users")
+def api_users():
+    user = current_user.get()
+    return {
+        "users": list_users(user["tenant_id"]),
+        "invites": list_invites(user["tenant_id"]),
+        "me": user["id"],
+    }
+
+
+@app.post("/api/invites")
+def api_create_invite(body: InviteRequest, request: Request):
+    user = current_user.get()
+    try:
+        token, expires_at = create_invite(user["tenant_id"], body.role, _actor(), body.email)
+    except InviteError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    append_audit("invite", {"role": body.role, "email": body.email, "by": _actor()})
+    base = str(request.base_url).rstrip("/")
+    return {"link": f"{base}/?invite={token}", "expires_at": expires_at, "role": body.role}
+
+
+@app.patch("/api/users/{user_id}")
+def api_set_role(user_id: str, body: RoleRequest):
+    user = current_user.get()
+    try:
+        changed = set_user_role(user["tenant_id"], user_id, body.role)
+    except LastAdminError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not changed:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado nesta empresa")
+    append_audit("role_change", {"user_id": user_id, "role": body.role, "by": _actor()})
+    return {"success": True}
+
+
+@app.delete("/api/users/{user_id}")
+def api_delete_user(user_id: str):
+    user = current_user.get()
+    if user_id == user["id"]:
+        raise HTTPException(status_code=409, detail="Você não pode remover a própria conta")
+    try:
+        removed = delete_user(user["tenant_id"], user_id)
+    except LastAdminError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not removed:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado nesta empresa")
+    append_audit("user_removed", {"user_id": user_id, "by": _actor()})
+    return {"success": True}
 
 
 @app.post("/api/auth/logout")

@@ -51,6 +51,23 @@ const API = {
     return res.json();
   },
 
+  async patch(path, body = {}) {
+    const res = await fetch(`/api${path}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...(state.selectedClusterId ? { "X-Cluster-Id": state.selectedClusterId } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      if (res.status === 401) showAuthScreen();
+      throw new Error(err.detail || `Erro ${res.status}`);
+    }
+    return res.json();
+  },
+
   async delete(path) {
     const res = await fetch(`/api${path}`, {
       method: "DELETE",
@@ -71,8 +88,26 @@ function showAuthScreen(message = "") {
   document.getElementById("auth-feedback").textContent = message;
 }
 
+const ROLE_RANK = { leitor: 1, operador: 2, admin: 3 };
+function can(role) {
+  return (ROLE_RANK[state.user?.role] || 0) >= ROLE_RANK[role];
+}
+
+function applyRoleUi() {
+  document.getElementById("nav-users").classList.toggle("hidden", !can("admin"));
+  const evaluate = document.getElementById("btn-evaluate");
+  if (evaluate) evaluate.classList.toggle("hidden", !can("operador"));
+  const clusterForm = document.getElementById("cluster-form");
+  if (clusterForm) clusterForm.classList.toggle("hidden", !can("admin"));
+}
+
 function showApp(user) {
   state.user = user;
+  if (state.inviteToken) {
+    state.inviteToken = null;
+    history.replaceState(null, "", "/");
+  }
+  applyRoleUi();
   document.getElementById("auth-screen").classList.add("hidden");
   document.getElementById("app-shell").classList.remove("hidden");
   document.getElementById("company-name").textContent = user.company_name;
@@ -96,6 +131,11 @@ async function submitAuthForm(event, endpoint) {
   const feedback = document.getElementById("auth-feedback");
   feedback.textContent = "";
   const body = Object.fromEntries(new FormData(event.currentTarget));
+  if (endpoint === "register" && state.inviteToken) {
+    endpoint = "accept-invite";
+    delete body.company_name;
+    body.token = state.inviteToken;
+  }
   try {
     const user = await API.post(`/auth/${endpoint}`, body);
     showApp(user);
@@ -195,8 +235,10 @@ function switchTab(tab) {
     capacity: "Capacity",
     scheduling: "Scheduling",
     audit: "Auditoria",
+    users: "Usuários",
   };
   document.getElementById("page-title").textContent = titles[tab] || tab;
+  if (tab === "users" && can("admin")) loadUsers().catch((e) => toast(e.message, "error"));
   if (tab === "cluster" && state.selectedClusterId) {
     loadClusterPods().catch((error) => {
       state.podError = error.message;
@@ -497,14 +539,16 @@ function buildRecTable(items, compact = false) {
     let actions = "";
     if (!compact) {
       const btns = [];
-      if (rec.status === "pending" && executable) {
+      if (rec.status === "pending" && executable && can("operador")) {
         btns.push(`<button class="btn btn-success btn-sm" data-action="approve" data-id="${rec.id}">Aprovar</button>`);
       }
-      if (rec.status === "pending") {
+      if (rec.status === "pending" && can("operador")) {
         btns.push(`<button class="btn btn-danger btn-sm" data-action="reject" data-id="${rec.id}">Rejeitar</button>`);
       }
-      if (rec.status === "approved" && executable) {
+      if (rec.status === "approved" && executable && can("operador")) {
         btns.push(`<button class="btn btn-ghost btn-sm" data-action="dry-run" data-id="${rec.id}">Simular</button>`);
+      }
+      if (rec.status === "approved" && executable && can("admin")) {
         btns.push(`<button class="btn btn-primary btn-sm" data-action="execute" data-id="${rec.id}">Executar</button>`);
       }
       actions = `<td><div class="actions-cell">${btns.join("")}</div></td>`;
@@ -1182,9 +1226,92 @@ document.getElementById("btn-evaluate").addEventListener("click", async () => {
   }
 });
 
+// ── Usuários e convites ─────────────────────────────────────
+
+const ROLE_LABELS = { leitor: "Leitor", operador: "Operador", admin: "Admin" };
+
+async function loadUsers() {
+  const data = await API.get("/users");
+  const rows = data.users.map((u) => `
+    <tr>
+      <td>${escapeHtml(u.full_name)}${u.id === data.me ? " (você)" : ""}</td>
+      <td>${escapeHtml(u.email)}</td>
+      <td>
+        <select data-user-role="${escapeHtml(u.id)}" ${u.id === data.me ? "disabled" : ""}>
+          ${Object.entries(ROLE_LABELS).map(([value, label]) =>
+            `<option value="${value}" ${u.role === value ? "selected" : ""}>${label}</option>`).join("")}
+        </select>
+      </td>
+      <td>${u.id === data.me ? "" : `<button class="btn btn-danger btn-sm" data-user-remove="${escapeHtml(u.id)}">Remover</button>`}</td>
+    </tr>`).join("");
+  const invites = data.invites.length
+    ? `<p class="muted">Convites ativos: ${data.invites.map((i) =>
+        `${escapeHtml(ROLE_LABELS[i.role] || i.role)}${i.email ? " · " + escapeHtml(i.email) : ""} (expira ${formatDate(i.expires_at)})`).join("; ")}</p>`
+    : "";
+  const el = document.getElementById("users-list");
+  el.innerHTML = `
+    <table>
+      <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>${invites}`;
+  el.querySelectorAll("[data-user-role]").forEach((select) => {
+    select.addEventListener("change", async () => {
+      try {
+        await API.patch(`/users/${select.dataset.userRole}`, { role: select.value });
+        toast("Papel atualizado. O usuário precisará entrar novamente.", "success");
+      } catch (e) {
+        toast(e.message, "error");
+      }
+      await loadUsers();
+    });
+  });
+  el.querySelectorAll("[data-user-remove]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      try {
+        await API.delete(`/users/${btn.dataset.userRemove}`);
+        toast("Usuário removido", "success");
+      } catch (e) {
+        toast(e.message, "error");
+      }
+      await loadUsers();
+    });
+  });
+}
+
+document.getElementById("invite-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const body = Object.fromEntries(new FormData(event.currentTarget));
+  if (!body.email) delete body.email;
+  try {
+    const result = await API.post("/invites", body);
+    document.getElementById("invite-result").innerHTML = `
+      <p>Envie este link ao colega (válido até ${formatDate(result.expires_at)}, uso único):</p>
+      <input class="mono" readonly value="${escapeHtml(result.link)}" onclick="this.select()" style="width:100%">`;
+    await loadUsers();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+});
+
 // ── Init ────────────────────────────────────────────────────
 
+function prepareInviteScreen() {
+  const token = new URLSearchParams(location.search).get("invite");
+  if (!token) return false;
+  state.inviteToken = token;
+  document.querySelector('[data-auth-view="register"]').click();
+  document.querySelector('[data-auth-view="register"]').textContent = "Aceitar convite";
+  document.getElementById("register-company-group").classList.add("hidden");
+  document.getElementById("register-company").required = false;
+  document.getElementById("register-submit").textContent = "Entrar na empresa";
+  return true;
+}
+
 async function bootstrap() {
+  if (prepareInviteScreen()) {
+    showAuthScreen("Você foi convidado. Crie seu acesso para entrar na empresa.");
+    return;
+  }
   try {
     const user = await API.get("/auth/me");
     showApp(user);

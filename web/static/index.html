@@ -32,7 +32,7 @@
         <button class="btn btn-primary auth-submit" type="submit">Entrar</button>
       </form>
       <form id="register-form" class="auth-form hidden">
-        <div class="form-group">
+        <div class="form-group" id="register-company-group">
           <label for="register-company">Empresa</label>
           <input id="register-company" name="company_name" maxlength="120" autocomplete="organization" required>
         </div>
@@ -48,7 +48,7 @@
           <label for="register-password">Senha (mínimo 12 caracteres)</label>
           <input id="register-password" name="password" type="password" minlength="12" autocomplete="new-password" required>
         </div>
-        <button class="btn btn-primary auth-submit" type="submit">Criar conta da empresa</button>
+        <button class="btn btn-primary auth-submit" type="submit" id="register-submit">Criar conta da empresa</button>
       </form>
       <p class="auth-feedback" id="auth-feedback" role="status"></p>
     </div>
@@ -72,6 +72,7 @@
         <button class="nav-item" data-tab="capacity">Capacity</button>
         <button class="nav-item" data-tab="scheduling">Scheduling</button>
         <button class="nav-item" data-tab="audit">Auditoria</button>
+        <button class="nav-item hidden" data-tab="users" id="nav-users">Usuários</button>
         <a class="nav-item nav-link" href="/relatorio" target="_blank">Relatório Gerencial ↗</a>
       </nav>
 
@@ -322,6 +323,34 @@
       </section>
 
       <!-- AUDIT -->
+      <section class="tab-panel" id="tab-users">
+        <div class="panel">
+          <div class="panel-header"><h3>Convidar colega</h3></div>
+          <div class="panel-body">
+            <form id="invite-form" class="cluster-form">
+              <div class="form-group">
+                <label for="invite-role">Papel</label>
+                <select id="invite-role" name="role">
+                  <option value="leitor">Leitor — apenas visualiza</option>
+                  <option value="operador" selected>Operador — avalia, aprova e rejeita</option>
+                  <option value="admin">Admin — gerencia clusters, usuários e executa</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="invite-email">E-mail do colega (opcional, restringe o convite)</label>
+                <input id="invite-email" name="email" type="email" maxlength="254">
+              </div>
+              <button class="btn btn-primary" type="submit">Gerar link de convite</button>
+            </form>
+            <div id="invite-result"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h3>Usuários da empresa</h3></div>
+          <div class="panel-body" id="users-list"></div>
+        </div>
+      </section>
+
       <section class="tab-panel" id="tab-audit">
         <div class="panel">
           <div class="panel-header"><h3>Log de Auditoria</h3></div>
