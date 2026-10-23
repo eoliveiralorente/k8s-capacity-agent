@@ -9,6 +9,7 @@ from collectors.metrics import get_node_metrics, get_pod_metrics
 from collectors.gke import get_node_pools
 
 from analyzers.capacity import analyze_capacity
+from analyzers.providers import detect_cloud
 from analyzers.decision import evaluate_decision
 from analyzers.gke_pools import merge_gke_pools
 from analyzers.health import evaluate_health
@@ -132,7 +133,11 @@ def evaluate_cluster(data=None):
         for item in scheduling_findings
     })
 
+    cloud, cloud_counts = detect_cloud(nodes)
+
     summary = {
+        "cloud": cloud,
+        "cloud_nodes": cloud_counts,
         "nodes": node_count,
         "pods": pod_count,
         "running_pending_pods": running_pending,

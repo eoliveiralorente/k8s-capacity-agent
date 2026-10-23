@@ -275,10 +275,7 @@ function showApproveModal(rec) {
   openModal(
     "Aprovar Recomendação",
     recDetailHtml(rec) + `
-      <div class="form-group">
-        <label>Analista DevOps</label>
-        <input type="text" id="input-approver" placeholder="Seu nome" autofocus>
-      </div>
+      <p class="muted">A aprovação será registrada no seu usuário autenticado.</p>
     `,
     `
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
@@ -287,10 +284,8 @@ function showApproveModal(rec) {
   );
 
   document.getElementById("confirm-approve").addEventListener("click", async () => {
-    const by = document.getElementById("input-approver").value.trim();
-    if (!by) { toast("Informe seu nome", "error"); return; }
     try {
-      await API.post(`/recommendations/${rec.id}/approve`, { by });
+      await API.post(`/recommendations/${rec.id}/approve`, {});
       toast("Recomendação aprovada", "success");
       closeModal();
       await refresh();
@@ -305,10 +300,6 @@ function showRejectModal(rec) {
     "Rejeitar Recomendação",
     recDetailHtml(rec) + `
       <div class="form-group">
-        <label>Analista DevOps</label>
-        <input type="text" id="input-rejector" placeholder="Seu nome">
-      </div>
-      <div class="form-group">
         <label>Motivo (opcional)</label>
         <textarea id="input-reason" placeholder="Motivo da rejeição"></textarea>
       </div>
@@ -320,11 +311,9 @@ function showRejectModal(rec) {
   );
 
   document.getElementById("confirm-reject").addEventListener("click", async () => {
-    const by = document.getElementById("input-rejector").value.trim();
-    if (!by) { toast("Informe seu nome", "error"); return; }
     const reason = document.getElementById("input-reason").value.trim();
     try {
-      await API.post(`/recommendations/${rec.id}/reject`, { by, reason });
+      await API.post(`/recommendations/${rec.id}/reject`, { reason });
       toast("Recomendação rejeitada", "success");
       closeModal();
       await refresh();

@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+from analyzers.providers import node_pool
 from collectors.metrics import parse_cpu, parse_memory
 
 
@@ -121,7 +122,7 @@ def analyze_capacity(nodes, pods, node_metrics, pod_metrics):
             if label.startswith("node-role.kubernetes.io/")
         )
         role = labels.get("magnum.openstack.org/role") or (role_labels[0] if role_labels else "worker")
-        pool = labels.get("cloud.google.com/gke-nodepool") or role
+        pool = node_pool(labels, fallback=role)
 
         machine = labels.get(
             "node.kubernetes.io/instance-type",

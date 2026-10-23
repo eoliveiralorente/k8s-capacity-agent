@@ -96,7 +96,7 @@ def reject(rec_id, rejector, reason=""):
     return {"success": True, "item": item}
 
 
-def mark_executed(rec_id, result):
+def mark_executed(rec_id, result, executed_by=None):
 
     item, data = get_recommendation(rec_id)
 
@@ -106,12 +106,14 @@ def mark_executed(rec_id, result):
     item["status"] = "executed" if result.get("success") else "failed"
     item["executed_at"] = datetime.now(timezone.utc).isoformat()
     item["execution_result"] = result
+    item["executed_by"] = executed_by
 
     save_recommendations(data["evaluation_id"], data["items"])
 
     append_audit("execute", {
         "rec_id": rec_id,
         "success": result.get("success"),
+        "executed_by": executed_by,
         "type": item["type"],
         "output": result.get("output", "")[:500],
     })

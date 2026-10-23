@@ -105,22 +105,24 @@ def get_cluster_overview():
     }
 
 
+def run_checked(args, what, timeout=60):
+    """Executa kubectl sem shell e levanta erro claro em vez de devolver vazio."""
+    try:
+        result = _run_process(args, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"Tempo esgotado ao consultar {what}") from exc
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"Não foi possível consultar {what}"
+        raise RuntimeError(detail[:1000])
+    return result.stdout
+
+
 def get_nodes():
-    output = run("kubectl get nodes -o json")
-
-    if not output:
-        return {"items": []}
-
-    return json.loads(output)
+    return json.loads(run_checked(["kubectl", "get", "nodes", "-o", "json"], "os nodes"))
 
 
 def get_pods():
-    output = run("kubectl get pods -A -o json")
-
-    if not output:
-        return {"items": []}
-
-    return json.loads(output)
+    return json.loads(run_checked(["kubectl", "get", "pods", "-A", "-o", "json"], "os pods", timeout=120))
 
 
 def get_cluster_pods():

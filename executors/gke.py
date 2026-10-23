@@ -1,16 +1,19 @@
-from collectors.kubernetes import run
+import subprocess
+
 from config import KUBERNETES_PROVIDER
-from tenant_context import current_cluster_provider
+from collectors.kubernetes import _run_process
+from tenant_context import current_cluster_provider, current_tenant_id
 
 
 def execute_scale_node_pool(operation, dry_run=False):
 
+    args = operation.get("execute_args")
     command = operation.get("execute_command")
 
-    if not command:
+    if not args:
         return {
             "success": False,
-            "output": "Comando de execução não definido",
+            "output": "Comando de execução não definido (gere uma nova avaliação)",
         }
 
     if dry_run:
@@ -20,19 +23,31 @@ def execute_scale_node_pool(operation, dry_run=False):
             "output": operation.get("dry_run_command", command),
         }
 
-    output = run(command)
+    try:
+        result = _run_process(args, capture_output=True, text=True, timeout=600)
+    except subprocess.TimeoutExpired:
+        return {"success": False, "dry_run": False, "output": "Tempo esgotado no resize", "command": command}
+    except OSError as exc:
+        return {"success": False, "dry_run": False, "output": f"Falha ao executar: {exc}", "command": command}
 
-    success = bool(output) or "Resizing" in output
+    output = "\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)
 
     return {
-        "success": success,
+        "success": result.returncode == 0,
         "dry_run": False,
-        "output": output or "Comando executado (sem output)",
+        "returncode": result.returncode,
+        "output": output[:4000] or "Comando executado (sem output)",
         "command": command,
     }
 
 
 def execute_operation(operation, dry_run=False):
+
+    if current_tenant_id.get():
+        return {
+            "success": False,
+            "output": "Execução automática desabilitada no modo multiempresa",
+        }
 
     provider = current_cluster_provider.get() or KUBERNETES_PROVIDER
     if provider != "gke":

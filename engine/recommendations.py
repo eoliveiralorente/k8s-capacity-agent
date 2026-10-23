@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 
 from config import CLUSTER, KUBERNETES_PROVIDER, PROJECT, REGION, REQUIRE_APPROVAL
-from tenant_context import current_cluster_provider
+from tenant_context import current_cluster_provider, current_tenant_id
 
 
 EXECUTABLE_TYPES = {
@@ -30,14 +30,15 @@ def _scale_operation(pool_name, current_nodes, direction, delta=1):
     else:
         target = max(1, current_nodes - delta)
 
-    command = (
-        f"gcloud container clusters resize {CLUSTER} "
-        f"--node-pool {pool_name} "
-        f"--num-nodes {target} "
-        f"--region {REGION} "
-        f"--project {PROJECT} "
-        f"--quiet"
-    )
+    args = [
+        "gcloud", "container", "clusters", "resize", CLUSTER,
+        "--node-pool", str(pool_name),
+        "--num-nodes", str(target),
+        "--region", REGION,
+        "--project", PROJECT,
+        "--quiet",
+    ]
+    command = " ".join(args)
 
     return {
         "kind": "scale_node_pool",
@@ -50,6 +51,8 @@ def _scale_operation(pool_name, current_nodes, direction, delta=1):
         },
         "dry_run_command": f"# preview: {command}",
         "execute_command": command,
+        "execute_args": args,
+        "target": {"cluster": CLUSTER, "region": REGION, "project": PROJECT},
     }
 
 
@@ -114,11 +117,18 @@ def enrich_recommendations(recommendations, node_pools, capacity=None):
         if pool_name and pool_name in pool_lookup:
             rec.setdefault("node_count", pool_lookup[pool_name])
 
-        operation = (
-            _build_operation(rec, node_pools)
-            if (current_cluster_provider.get() or KUBERNETES_PROVIDER) == "gke"
-            else _manual_operation("Escalonamento automático disponível apenas no modo GKE")
-        )
+        provider = current_cluster_provider.get() or KUBERNETES_PROVIDER
+        if current_tenant_id.get():
+            # Modo multiempresa: o cluster do cliente não tem projeto/região GKE
+            # cadastrados; usar o config global alteraria o cluster errado.
+            operation = _manual_operation(
+                "Execução automática desabilitada no modo multiempresa "
+                "até o cluster ter coordenadas GKE próprias"
+            )
+        elif provider == "gke" and CLUSTER and REGION and PROJECT:
+            operation = _build_operation(rec, node_pools)
+        else:
+            operation = _manual_operation("Escalonamento automático disponível apenas no modo GKE configurado")
         rec_type = rec.get("type", "UNKNOWN")
         source = rec.get("source", "unknown")
 

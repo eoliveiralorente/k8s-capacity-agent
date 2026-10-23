@@ -60,17 +60,26 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 
 class ApproveRequest(BaseModel):
-    by: str = Field(min_length=1)
+    # Mantido por compatibilidade; o aprovador real é sempre o usuário autenticado.
+    by: str | None = None
 
 
 class RejectRequest(BaseModel):
-    by: str = Field(min_length=1)
-    reason: str = ""
+    by: str | None = None
+    reason: str = Field(default="", max_length=1000)
 
 
 class ExecuteRequest(BaseModel):
     dry_run: bool = False
-    force: bool = True
+    # Execução real exige confirmação explícita do cliente (force=true).
+    force: bool = False
+
+
+def _actor():
+    user = current_user.get() or {}
+    name = user.get("full_name") or "desconhecido"
+    email = user.get("email")
+    return f"{name} <{email}>" if email else name
 
 
 class RegisterRequest(BaseModel):
@@ -385,7 +394,7 @@ def api_evaluate():
 @app.post("/api/recommendations/{rec_id}/approve")
 def api_approve(rec_id: str, body: ApproveRequest):
 
-    result = approve(rec_id, body.by)
+    result = approve(rec_id, _actor())
 
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -396,7 +405,7 @@ def api_approve(rec_id: str, body: ApproveRequest):
 @app.post("/api/recommendations/{rec_id}/reject")
 def api_reject(rec_id: str, body: RejectRequest):
 
-    result = reject(rec_id, body.by, body.reason)
+    result = reject(rec_id, _actor(), body.reason)
 
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -423,7 +432,7 @@ def api_execute(rec_id: str, body: ExecuteRequest):
     result = execute_operation(item["operation"], dry_run=body.dry_run)
 
     if not body.dry_run:
-        mark_executed(rec_id, result)
+        mark_executed(rec_id, result, executed_by=_actor())
 
     return {
         "success": result.get("success", False),
