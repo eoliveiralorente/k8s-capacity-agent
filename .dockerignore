@@ -1,6 +1,7 @@
 .capacity-agent/
 .capacity-agent-*/
 .venv/
+.env
 aws/
 awscliv2.zip
 __pycache__/
