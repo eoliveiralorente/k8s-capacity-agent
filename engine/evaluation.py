@@ -9,6 +9,7 @@ from collectors.metrics import get_container_metrics, get_node_metrics, get_pod_
 from collectors.gke import get_node_pools
 
 from analyzers.capacity import analyze_capacity
+from analyzers.nodes import analyze_nodes
 from analyzers.providers import detect_cloud
 from analyzers.decision import evaluate_decision
 from analyzers.gke_pools import merge_gke_pools
@@ -207,6 +208,7 @@ def evaluate_cluster(data=None):
             },
         },
         "recommendations": all_recommendations,
+        "nodes_usage": analyze_nodes(nodes, pods, node_metrics),
         "decision": decision,
         "node_pools": node_pools,
     }
@@ -276,6 +278,7 @@ def summarize_report_for_api(report):
             "findings_by_namespace": findings_by_namespace,
         },
         "recommendations": report.get("recommendations", []),
+        "nodes_usage": report.get("nodes_usage", []),
         "stability": stability,
     }
 

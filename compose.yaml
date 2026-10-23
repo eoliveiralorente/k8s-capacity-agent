@@ -14,6 +14,8 @@ services:
       CAPACITY_AGENT_ENCRYPTION_KEY: ${CAPACITY_AGENT_ENCRYPTION_KEY:-}
       CAPACITY_AGENT_COOKIE_SECURE: ${CAPACITY_AGENT_COOKIE_SECURE:-false}
       CAPACITY_AGENT_PROVIDER: ${CAPACITY_AGENT_PROVIDER:-kubernetes}
+      # Pendências internas do roadmap (somente ambiente do desenvolvedor; nunca no cliente)
+      CAPACITY_AGENT_SHOW_ROADMAP: ${CAPACITY_AGENT_SHOW_ROADMAP:-false}
       CAPACITY_AGENT_STATE_DIR: /data/state
       CAPACITY_AGENT_ACCOUNT_DB: /data/accounts.sqlite3
     ports:

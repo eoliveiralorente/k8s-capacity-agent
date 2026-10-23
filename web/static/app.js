@@ -462,6 +462,8 @@ function renderOverview() {
     </div>
   `;
   renderConnectionSummary();
+  renderNodesUsage();
+  renderRoadmap();
 
   const health = report?.health;
   if (health) {
@@ -1243,6 +1245,66 @@ document.getElementById("btn-evaluate").addEventListener("click", async () => {
     spinner.classList.add("hidden");
   }
 });
+
+// ── Consumo por node ────────────────────────────────────────
+
+function usageBar(label, pct) {
+  if (pct === null || pct === undefined) {
+    return `<div class="metric-bar" style="margin:0"><div class="metric-bar-header"><span>${label}</span><span>sem métrica</span></div></div>`;
+  }
+  return `
+    <div class="metric-bar" style="margin:0">
+      <div class="metric-bar-header"><span>${label}</span><span>${formatPct(pct)}</span></div>
+      <div class="metric-bar-track"><div class="metric-bar-fill ${barClass(pct)}" style="width:${Math.min(pct, 100)}%"></div></div>
+    </div>`;
+}
+
+function renderNodesUsage() {
+  const el = document.getElementById("nodes-usage");
+  const nodes = state.status?.latest_report?.nodes_usage || [];
+  if (!nodes.length) {
+    el.innerHTML = `<div class="empty-state"><p>Execute uma nova avaliação para ver o consumo por node</p></div>`;
+    return;
+  }
+  el.innerHTML = `
+    <table>
+      <thead><tr><th>Node</th><th>Pool</th><th>Pods</th><th>CPU uso</th><th>CPU reservado</th><th>Memória uso</th><th>Memória reservada</th></tr></thead>
+      <tbody>${nodes.map((n) => `
+        <tr>
+          <td><strong>${escapeHtml(n.name)}</strong>${n.control_plane ? ' <span class="badge badge-manual">control plane</span>' : ""}${n.ready ? "" : ' <span class="badge badge-rejected">NotReady</span>'}</td>
+          <td>${escapeHtml(n.pool)}</td>
+          <td>${n.pod_count}${n.pods_capacity ? ` <span style="color:var(--text-muted);font-size:11px">/ ${n.pods_capacity}</span>` : ""}</td>
+          <td>${usageBar("uso", n.cpu_usage_pct)}</td>
+          <td>${usageBar("requests", n.cpu_req_pct)}</td>
+          <td>${usageBar("uso", n.mem_usage_pct)}</td>
+          <td>${usageBar("requests", n.mem_req_pct)}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>
+    <p style="color:var(--text-muted);font-size:12px;margin-top:8px">Percentuais sobre o allocatable de cada node. "Uso" = consumo real agora (metrics-server); "reservado" = soma dos requests dos pods no node.</p>`;
+}
+
+// ── Pendências do roadmap (interno) ─────────────────────────
+
+let roadmapCache = null;
+async function renderRoadmap() {
+  const panel = document.getElementById("roadmap-panel");
+  if (!state.status?.show_roadmap) {
+    panel.classList.add("hidden");
+    return;
+  }
+  try {
+    if (!roadmapCache) roadmapCache = await (await fetch(`/static/roadmap.json?_=${Date.now()}`)).json();
+  } catch (e) {
+    return;
+  }
+  panel.classList.remove("hidden");
+  document.getElementById("roadmap-list").innerHTML = `
+    <ul>${roadmapCache.items.map((i) => `
+      <li><strong>${escapeHtml(i.titulo)}</strong> <span class="badge badge-pending">${escapeHtml(i.origem)}</span><br>
+      <span style="color:var(--text-muted);font-size:12px">${escapeHtml(i.detalhe)}</span></li>`).join("")}
+    </ul>`;
+}
 
 // ── Usuários e convites ─────────────────────────────────────
 

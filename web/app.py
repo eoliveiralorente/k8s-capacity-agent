@@ -365,6 +365,8 @@ def api_status():
         "require_approval": REQUIRE_APPROVAL,
         "auto_execute": AUTO_EXECUTE,
         "latest_report": latest_report,
+        "show_roadmap": os.getenv("CAPACITY_AGENT_SHOW_ROADMAP", "false").lower() == "true"
+        and (user.get("role") == "admin"),
     }
 
 

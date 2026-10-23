@@ -1,0 +1,8 @@
+{
+  "updated_at": "2026-10-23",
+  "items": [
+    {"titulo": "Prometheus no k8s-carriel", "detalhe": "Instalar prometheus-community/prometheus (namespace monitoring, retenção 15d) e ativar o coletor Prometheus via proxy da API Kubernetes (services/proxy).", "origem": "Sprint 1B"},
+    {"titulo": "Réplicas e HPA", "detalhe": "Completar o 1C: sugerir mais/menos réplicas, criar HPA onde falta e ajustar min/max de HPA existente.", "origem": "Sprint 1C"},
+    {"titulo": "Trocar produção pela v2", "detalhe": "Planejar a troca da versão em produção pela k8s-capacity-agent-v2 (branch sprint-0) com backup e rollback.", "origem": "Sprint 0"}
+  ]
+}
