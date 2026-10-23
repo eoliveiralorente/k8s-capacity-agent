@@ -288,11 +288,47 @@ def carry_over_decisions(previous_items, new_items):
     return carried
 
 
+REDUCTION_MAX_CPU_PEAK_PCT = 50
+REDUCTION_MAX_MEM_PEAK_PCT = 70
+
+
+def apply_history(recommendations, history):
+    """Anexa histórico/confiança e suprime reduções contraditas por picos."""
+    from analyzers.history import describe
+
+    kept, suppressed = [], []
+    for rec in recommendations:
+        pool_history = history.get(rec.get("pool")) if rec.get("pool") else None
+        rec["history"] = pool_history
+        rec["confidence"] = pool_history["confidence"] if pool_history else "baixa"
+        if pool_history:
+            rec["action"] = f"{rec.get('action', '')} ({describe(pool_history)})"
+        if rec.get("type") == "UNDERUTILIZED_POOL" and pool_history:
+            cpu_peak = pool_history.get("cpu_usage_max") or 0
+            mem_peak = pool_history.get("mem_usage_max") or 0
+            if cpu_peak > REDUCTION_MAX_CPU_PEAK_PCT or mem_peak > REDUCTION_MAX_MEM_PEAK_PCT:
+                suppressed.append({
+                    "id": rec["id"], "pool": rec["pool"], "type": rec["type"],
+                    "reason": f"Picos históricos (CPU {cpu_peak}%, memória {mem_peak}%) não permitem redução",
+                })
+                continue
+        kept.append(rec)
+    return kept, suppressed
+
+
 def run_evaluation(source="cli", actor=None):
 
     from datetime import datetime, timezone
 
-    from approval.store import append_audit, load_recommendations, save_recommendations, save_report
+    from analyzers.history import summarize_history
+    from approval.store import (
+        append_audit,
+        load_metric_samples,
+        load_recommendations,
+        save_metric_samples,
+        save_recommendations,
+        save_report,
+    )
     from config import CLUSTER
     from collectors.kubernetes import get_current_context
     from engine.recommendations import new_evaluation_id
@@ -305,6 +341,14 @@ def run_evaluation(source="cli", actor=None):
         else current_cluster_name.get() or CLUSTER
     )
     evaluation_id = new_evaluation_id()
+
+    save_metric_samples(result["capacity"])
+    history = summarize_history(load_metric_samples(days=14))
+    result["history"] = history
+    result["recommendations"], result["suppressed_recommendations"] = apply_history(
+        result["recommendations"], history
+    )
+    result["summary"]["recommendations_count"] = len(result["recommendations"])
 
     report = {
         "evaluation_id": evaluation_id,

@@ -146,6 +146,14 @@ async def disable_dashboard_asset_caching(request: Request, call_next):
 @app.on_event("startup")
 def startup():
     initialize_database()
+    from engine import sampler
+    sampler.start()
+
+
+@app.on_event("shutdown")
+def shutdown():
+    from engine import sampler
+    sampler.stop()
 
 
 def _set_session_cookie(response, token):

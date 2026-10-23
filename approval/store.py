@@ -172,6 +172,18 @@ CREATE TABLE IF NOT EXISTS audit_log (
     event TEXT NOT NULL,
     details TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS metric_samples (
+    tenant_id TEXT NOT NULL,
+    cluster_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    pool TEXT NOT NULL,
+    node_count INTEGER NOT NULL,
+    cpu_usage_pct REAL,
+    mem_usage_pct REAL,
+    cpu_req_pct REAL,
+    mem_req_pct REAL
+);
+CREATE INDEX IF NOT EXISTS samples_scope_idx ON metric_samples(tenant_id, cluster_id, timestamp);
 CREATE INDEX IF NOT EXISTS audit_tenant_idx ON audit_log(tenant_id, timestamp);
 """
 
@@ -379,3 +391,50 @@ def load_audit(limit=100):
         }
         for row in rows
     ]
+
+
+# ── Amostras de métricas (histórico sem Prometheus) ─────────────
+
+SAMPLE_RETENTION_DAYS = 30
+
+
+def save_metric_samples(capacity, timestamp=None):
+    """Grava uma amostra por pool a partir do resultado de analyze_capacity."""
+    from datetime import timedelta
+
+    tenant_id, cluster_id = _scope()
+    now = timestamp or datetime.now(timezone.utc).isoformat()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=SAMPLE_RETENTION_DAYS)).isoformat()
+
+    with _transaction(write=True) as connection:
+        for pool, data in (capacity or {}).items():
+            metrics = data.get("metrics", {})
+            connection.execute(
+                "INSERT INTO metric_samples(tenant_id, cluster_id, timestamp, pool, node_count, "
+                "cpu_usage_pct, mem_usage_pct, cpu_req_pct, mem_req_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (tenant_id, cluster_id, now, pool,
+                 data.get("capacity", {}).get("node_count", 0),
+                 metrics.get("cpu_usage_vs_alloc_pct"), metrics.get("mem_usage_vs_alloc_pct"),
+                 metrics.get("cpu_req_vs_alloc_pct"), metrics.get("mem_req_vs_alloc_pct")),
+            )
+        connection.execute(
+            "DELETE FROM metric_samples WHERE tenant_id = ? AND cluster_id = ? AND timestamp < ?",
+            (tenant_id, cluster_id, cutoff),
+        )
+
+
+def load_metric_samples(days=14):
+    from datetime import timedelta
+
+    tenant_id, cluster_id = _scope()
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    with _transaction() as connection:
+        rows = connection.execute(
+            "SELECT timestamp, pool, node_count, cpu_usage_pct, mem_usage_pct, cpu_req_pct, mem_req_pct "
+            "FROM metric_samples WHERE tenant_id = ? AND cluster_id = ? AND timestamp >= ? "
+            "ORDER BY timestamp",
+            (tenant_id, cluster_id, since),
+        ).fetchall()
+
+    return [dict(row) for row in rows]

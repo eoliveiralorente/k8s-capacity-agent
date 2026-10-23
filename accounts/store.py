@@ -361,6 +361,14 @@ def delete_cluster(tenant_id, cluster_id):
     return cursor.rowcount > 0
 
 
+def list_all_clusters():
+    """Todos os clusters de todas as empresas (uso interno do amostrador)."""
+    initialize_database()
+    with _connect() as connection:
+        rows = connection.execute("SELECT id, tenant_id, name FROM clusters ORDER BY created_at").fetchall()
+    return [dict(row) for row in rows]
+
+
 def list_companies():
     initialize_database()
     with _connect() as connection:
