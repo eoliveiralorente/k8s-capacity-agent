@@ -205,6 +205,7 @@ def api_auth_me():
         "email": user["email"],
         "company_name": user["company_name"],
         "tenant_id": user["tenant_id"],
+        "role": user.get("role", "admin"),
     }
 
 
@@ -441,6 +442,9 @@ def api_reject(rec_id: str, body: RejectRequest):
 
 @app.post("/api/recommendations/{rec_id}/execute")
 def api_execute(rec_id: str, body: ExecuteRequest):
+
+    if not body.dry_run and (current_user.get() or {}).get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Execução real requer papel 'admin'")
 
     item, _ = get_recommendation(rec_id)
 

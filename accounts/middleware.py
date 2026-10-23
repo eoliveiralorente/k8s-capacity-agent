@@ -3,6 +3,7 @@ from urllib.parse import urlsplit
 
 from starlette.responses import JSONResponse
 
+from accounts.rbac import has_role, required_role
 from accounts.store import get_cluster, get_session, list_clusters
 from tenant_context import (
     current_cluster_id,
@@ -55,6 +56,15 @@ class TenantAuthenticationMiddleware:
         session = get_session(token)
         if not session:
             response = JSONResponse({"detail": "Autenticação necessária"}, status_code=401)
+            await response(scope, receive, send)
+            return
+
+        needed = required_role(method, path)
+        if not has_role(session.get("role"), needed):
+            response = JSONResponse(
+                {"detail": f"Permissão insuficiente: requer papel '{needed}'"},
+                status_code=403,
+            )
             await response(scope, receive, send)
             return
 

@@ -69,6 +69,10 @@ def initialize_database():
             CREATE INDEX IF NOT EXISTS clusters_tenant_idx ON clusters(tenant_id);
             """
         )
+        # Migração RBAC: contas existentes viram admin.
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)")}
+        if "role" not in columns:
+            connection.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'")
     try:
         DB_PATH.chmod(0o600)
         DB_PATH.parent.chmod(0o700)
@@ -119,14 +123,14 @@ def register_account(company_name, full_name, email, password):
                 (tenant_id, company_name.strip(), now),
             )
             connection.execute(
-                "INSERT INTO users(id, tenant_id, full_name, email, password_hash, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO users(id, tenant_id, full_name, email, password_hash, created_at, role) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'admin')",
                 (user_id, tenant_id, full_name.strip(), email, _hash_password(password), now),
             )
     except sqlite3.IntegrityError as exc:
         raise DuplicateAccountError("Já existe uma conta com esse e-mail") from exc
     return {"id": user_id, "tenant_id": tenant_id, "full_name": full_name.strip(), "email": email,
-            "company_name": company_name.strip()}
+            "company_name": company_name.strip(), "role": "admin"}
 
 
 def authenticate(email, password):
@@ -134,13 +138,13 @@ def authenticate(email, password):
     with _connect() as connection:
         row = connection.execute(
             "SELECT users.id, users.tenant_id, users.full_name, users.email, users.password_hash, "
-            "tenants.company_name FROM users JOIN tenants ON tenants.id = users.tenant_id "
+            "users.role, tenants.company_name FROM users JOIN tenants ON tenants.id = users.tenant_id "
             "WHERE users.email = ?",
             (email.strip().lower(),),
         ).fetchone()
     if row is None or not _verify_password(password, row["password_hash"]):
         return None
-    return {key: row[key] for key in ("id", "tenant_id", "full_name", "email", "company_name")}
+    return {key: row[key] for key in ("id", "tenant_id", "full_name", "email", "company_name", "role")}
 
 
 def create_session(user_id):
@@ -163,8 +167,8 @@ def get_session(token):
     token_hash = hashlib.sha256(token.encode("ascii", errors="ignore")).hexdigest()
     with _connect() as connection:
         row = connection.execute(
-            "SELECT users.id, users.tenant_id, users.full_name, users.email, tenants.company_name, "
-            "sessions.expires_at FROM sessions JOIN users ON users.id = sessions.user_id "
+            "SELECT users.id, users.tenant_id, users.full_name, users.email, users.role, "
+            "tenants.company_name, sessions.expires_at FROM sessions JOIN users ON users.id = sessions.user_id "
             "JOIN tenants ON tenants.id = users.tenant_id WHERE sessions.token_hash = ?",
             (token_hash,),
         ).fetchone()
