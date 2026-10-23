@@ -1,6 +1,7 @@
 import hashlib
 import os
 import re
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -79,7 +80,7 @@ def _actor():
     user = current_user.get() or {}
     name = user.get("full_name") or "desconhecido"
     email = user.get("email")
-    return f"{name} <{email}>" if email else name
+    return f"{name} ({email})" if email else name
 
 
 class RegisterRequest(BaseModel):
@@ -150,11 +151,36 @@ def api_register(body: RegisterRequest, response: Response):
     return user
 
 
+LOGIN_MAX_FAILURES = 5
+LOGIN_WINDOW_SECONDS = 15 * 60
+_login_failures = {}
+
+
+def _login_key(request, email):
+    client = request.client.host if request.client else "?"
+    return f"{client}|{email.strip().lower()}"
+
+
+def _recent_failures(key):
+    now = time.monotonic()
+    attempts = [t for t in _login_failures.get(key, []) if now - t < LOGIN_WINDOW_SECONDS]
+    _login_failures[key] = attempts
+    return attempts
+
+
 @app.post("/api/auth/login")
-def api_login(body: LoginRequest, response: Response):
+def api_login(body: LoginRequest, request: Request, response: Response):
+    key = _login_key(request, body.email)
+    if len(_recent_failures(key)) >= LOGIN_MAX_FAILURES:
+        raise HTTPException(
+            status_code=429,
+            detail="Muitas tentativas de login. Aguarde 15 minutos e tente novamente.",
+        )
     user = authenticate(body.email, body.password)
     if not user:
+        _login_failures.setdefault(key, []).append(time.monotonic())
         raise HTTPException(status_code=401, detail="E-mail ou senha inválidos")
+    _login_failures.pop(key, None)
     token, _ = create_session(user["id"])
     _set_session_cookie(response, token)
     return user
@@ -378,7 +404,7 @@ def api_evaluate():
         raise HTTPException(status_code=409, detail="Cadastre ou selecione um cluster")
 
     try:
-        report = run_evaluation(source="dashboard")
+        report = run_evaluation(source="dashboard", actor=_actor())
     except Exception as exc:
         raise HTTPException(
             status_code=500,

@@ -259,11 +259,40 @@ def summarize_report_for_api(report):
     }
 
 
-def run_evaluation(source="cli"):
+CARRY_FIELDS = (
+    "status", "approved_by", "approved_at",
+    "rejected_by", "rejected_at", "rejection_reason",
+)
+
+
+def carry_over_decisions(previous_items, new_items):
+    """Mantém decisões humanas entre avaliações.
+
+    - Rejeitada continua rejeitada (mesmo id = mesma recomendação).
+    - Aprovada só continua aprovada se a operação proposta for idêntica;
+      se os parâmetros mudaram, volta a exigir nova aprovação.
+    - Executada/falhou: a situação reapareceu, então volta para pendente.
+    """
+    previous = {item["id"]: item for item in previous_items or []}
+    carried = 0
+    for item in new_items:
+        old = previous.get(item["id"])
+        if not old:
+            continue
+        status = old.get("status")
+        same_operation = old.get("operation", {}).get("params") == item.get("operation", {}).get("params")
+        if status == "rejected" or (status == "approved" and same_operation):
+            for field in CARRY_FIELDS:
+                item[field] = old.get(field)
+            carried += 1
+    return carried
+
+
+def run_evaluation(source="cli", actor=None):
 
     from datetime import datetime, timezone
 
-    from approval.store import append_audit, save_recommendations, save_report
+    from approval.store import append_audit, load_recommendations, save_recommendations, save_report
     from config import CLUSTER
     from collectors.kubernetes import get_current_context
     from engine.recommendations import new_evaluation_id
@@ -284,6 +313,11 @@ def run_evaluation(source="cli"):
         **result,
     }
 
+    carried = carry_over_decisions(
+        load_recommendations().get("items", []),
+        result["recommendations"],
+    )
+
     save_report(evaluation_id, report)
     save_recommendations(evaluation_id, result["recommendations"])
 
@@ -292,6 +326,8 @@ def run_evaluation(source="cli"):
         "recommendations": len(result["recommendations"]),
         "decision_allowed": result["decision"]["allowed"],
         "source": source,
+        "by": actor,
+        "decisions_kept": carried,
     })
 
     return report

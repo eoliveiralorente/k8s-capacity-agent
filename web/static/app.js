@@ -414,7 +414,7 @@ function renderOverview() {
           </span>
         </div>
         <div class="metric-bar-track">
-          <div class="metric-bar-fill ${barClass(c.coverage)}" style="width:${Math.min(c.coverage, 100)}%"></div>
+          <div class="metric-bar-fill ${c.status === "OK" ? "ok" : "bad"}" style="width:${Math.min(c.coverage, 100)}%"></div>
         </div>
       </div>
     `).join("");
@@ -516,9 +516,9 @@ function buildRecTable(items, compact = false) {
         <td>${severityBadge(rec.severity)}</td>
         <td class="mono">${rec.id}</td>
         <td>${rec.type}</td>
-        <td>${rec.pool || "—"}</td>
+        <td>${escapeHtml(rec.pool || "—")}</td>
         <td>${tag}</td>
-        <td style="max-width:280px">${rec.action}</td>
+        <td style="max-width:280px">${escapeHtml(rec.action)}</td>
         ${actions}
       </tr>
     `;
@@ -731,12 +731,12 @@ function buildPodsTable(findings, showNamespace = false) {
       <tr>
         ${nsCell}
         <td>
-          <span class="mono">${f.pod}</span>
+          <span class="mono">${escapeHtml(f.pod)}</span>
           ${message}
         </td>
         <td>${f.cause}</td>
         <td>${severityBadge(f.severity)}</td>
-        <td style="max-width:320px">${f.action}</td>
+        <td style="max-width:320px">${escapeHtml(f.action)}</td>
       </tr>
     `;
   }).join("");
@@ -791,8 +791,8 @@ function renderAudit(entries) {
     ? entries.map((e) => `
         <div class="audit-entry">
           <span class="audit-time">${formatDate(e.timestamp)}</span>
-          <span class="audit-event ${e.event}">${e.event}</span>
-          <span class="audit-details">${JSON.stringify(e.details)}</span>
+          <span class="audit-event ${escapeHtml(e.event)}">${escapeHtml(e.event)}</span>
+          <span class="audit-details">${escapeHtml(JSON.stringify(e.details))}</span>
         </div>
       `).join("")
     : `<div class="empty-state"><p>Nenhum evento registrado</p></div>`;
