@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from config import AUTO_EXECUTE, REQUIRE_APPROVAL
 
-from approval.store import append_audit, load_recommendations, save_recommendations
+from approval.store import append_audit, load_recommendations, update_recommendation
 
 
 def get_recommendation(rec_id):
@@ -29,30 +29,23 @@ def list_by_status(status=None):
 
 def approve(rec_id, approver):
 
-    item, data = get_recommendation(rec_id)
+    def mutate(item):
+        if item["status"] != "pending":
+            return f"Recomendação já está com status '{item['status']}'"
+        if not item.get("operation", {}).get("executable"):
+            return ("Esta recomendação requer intervenção manual e não pode ser "
+                    "aprovada para execução automática")
+        item["status"] = "approved"
+        item["approved_by"] = approver
+        item["approved_at"] = datetime.now(timezone.utc).isoformat()
+        return None
+
+    item, error = update_recommendation(rec_id, mutate)
 
     if item is None:
         return {"success": False, "error": f"Recomendação {rec_id} não encontrada"}
-
-    if item["status"] != "pending":
-        return {
-            "success": False,
-            "error": f"Recomendação já está com status '{item['status']}'",
-        }
-
-    if not item.get("operation", {}).get("executable"):
-        return {
-            "success": False,
-            "error": "Esta recomendação requer intervenção manual e não pode ser aprovada para execução automática",
-        }
-
-    now = datetime.now(timezone.utc).isoformat()
-
-    item["status"] = "approved"
-    item["approved_by"] = approver
-    item["approved_at"] = now
-
-    save_recommendations(data["evaluation_id"], data["items"])
+    if error:
+        return {"success": False, "error": error}
 
     append_audit("approve", {
         "rec_id": rec_id,
@@ -66,25 +59,21 @@ def approve(rec_id, approver):
 
 def reject(rec_id, rejector, reason=""):
 
-    item, data = get_recommendation(rec_id)
+    def mutate(item):
+        if item["status"] != "pending":
+            return f"Recomendação já está com status '{item['status']}'"
+        item["status"] = "rejected"
+        item["rejected_by"] = rejector
+        item["rejected_at"] = datetime.now(timezone.utc).isoformat()
+        item["rejection_reason"] = reason
+        return None
+
+    item, error = update_recommendation(rec_id, mutate)
 
     if item is None:
         return {"success": False, "error": f"Recomendação {rec_id} não encontrada"}
-
-    if item["status"] != "pending":
-        return {
-            "success": False,
-            "error": f"Recomendação já está com status '{item['status']}'",
-        }
-
-    now = datetime.now(timezone.utc).isoformat()
-
-    item["status"] = "rejected"
-    item["rejected_by"] = rejector
-    item["rejected_at"] = now
-    item["rejection_reason"] = reason
-
-    save_recommendations(data["evaluation_id"], data["items"])
+    if error:
+        return {"success": False, "error": error}
 
     append_audit("reject", {
         "rec_id": rec_id,
@@ -98,17 +87,17 @@ def reject(rec_id, rejector, reason=""):
 
 def mark_executed(rec_id, result, executed_by=None):
 
-    item, data = get_recommendation(rec_id)
+    def mutate(item):
+        item["status"] = "executed" if result.get("success") else "failed"
+        item["executed_at"] = datetime.now(timezone.utc).isoformat()
+        item["execution_result"] = result
+        item["executed_by"] = executed_by
+        return None
+
+    item, _ = update_recommendation(rec_id, mutate)
 
     if item is None:
         return
-
-    item["status"] = "executed" if result.get("success") else "failed"
-    item["executed_at"] = datetime.now(timezone.utc).isoformat()
-    item["execution_result"] = result
-    item["executed_by"] = executed_by
-
-    save_recommendations(data["evaluation_id"], data["items"])
 
     append_audit("execute", {
         "rec_id": rec_id,
