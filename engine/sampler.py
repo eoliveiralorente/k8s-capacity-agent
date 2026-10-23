@@ -22,7 +22,9 @@ def sample_cluster(tenant_id, cluster_id, cluster_name=None):
     from analyzers.capacity import analyze_capacity
     from approval.store import save_metric_samples
     from collectors.kubernetes import get_nodes, get_pods
-    from collectors.metrics import get_node_metrics, get_pod_metrics
+    from analyzers.workloads import collect_workloads
+    from approval.store import save_workload_samples
+    from collectors.metrics import get_container_metrics, get_node_metrics, get_pod_metrics
 
     tokens = [
         (current_tenant_id, current_tenant_id.set(tenant_id)),
@@ -34,8 +36,12 @@ def sample_cluster(tenant_id, cluster_id, cluster_name=None):
         if not node_metrics:
             log.warning("Sem métricas de nodes (metrics-server?) no cluster %s", cluster_name or cluster_id)
             return False
-        capacity = analyze_capacity(get_nodes(), get_pods(), node_metrics, get_pod_metrics())
+        pods = get_pods()
+        capacity = analyze_capacity(get_nodes(), pods, node_metrics, get_pod_metrics())
         save_metric_samples(capacity)
+        workload_samples, _ = collect_workloads(pods, get_container_metrics())
+        if workload_samples:
+            save_workload_samples(workload_samples)
         return True
     finally:
         for var, token in reversed(tokens):

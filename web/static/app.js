@@ -294,7 +294,14 @@ function recDetailHtml(rec) {
   const params = op.params || {};
   let opHtml = "";
 
-  if (op.executable) {
+  if (op.executable && op.kind === "k8s_set_resources") {
+    opHtml = `
+      <dt>Operação</dt>
+      <dd>Ajustar requests de ${escapeHtml(params.kind)}/${escapeHtml(params.name)} (container ${escapeHtml(params.container)}):
+        CPU ${escapeHtml(params.current?.cpu || "—")} → ${escapeHtml(params.target?.cpu)},
+        memória ${escapeHtml(params.current?.memory || "—")} → ${escapeHtml(params.target?.memory)}</dd>
+    `;
+  } else if (op.executable) {
     opHtml = `
       <dt>Operação</dt>
       <dd>${op.kind} — ${params.current_nodes ?? "?"} → ${params.target_nodes ?? "?"} nodes</dd>
@@ -390,10 +397,21 @@ function showExecuteModal(rec, dryRun = false) {
         force: true,
       });
       toast(
-        dryRun ? "Simulação concluída" : (result.success ? "Execução concluída" : "Execução falhou"),
+        dryRun
+          ? (result.success ? "Simulação validada pelo cluster" : "Simulação falhou")
+          : (result.success ? "Execução concluída" : "Execução falhou"),
         result.success ? "success" : "error"
       );
-      closeModal();
+      const r = result.result || {};
+      openModal(
+        dryRun ? "Resultado da simulação" : "Resultado da execução",
+        `<dl class="rec-detail">
+           <dt>Comando</dt><dd class="mono">${escapeHtml(r.command || "—")}</dd>
+           <dt>Saída</dt><dd class="mono">${escapeHtml(r.output || "—")}</dd>
+           ${r.rollback_command ? `<dt>Como reverter</dt><dd class="mono">${escapeHtml(r.rollback_command)}</dd>` : ""}
+         </dl>`,
+        `<button class="btn btn-primary" onclick="closeModal()">Fechar</button>`
+      );
       await refresh();
     } catch (e) {
       toast(e.message, "error");

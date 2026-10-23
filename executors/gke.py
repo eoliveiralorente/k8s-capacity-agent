@@ -43,6 +43,11 @@ def execute_scale_node_pool(operation, dry_run=False):
 
 def execute_operation(operation, dry_run=False):
 
+    if operation.get("kind") == "k8s_set_resources":
+        # Nível 1: API do Kubernetes com o kubeconfig do cluster ativo — qualquer cloud.
+        from executors.kubernetes import execute_set_resources
+        return execute_set_resources(operation, dry_run=dry_run)
+
     if current_tenant_id.get():
         return {
             "success": False,

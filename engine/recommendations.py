@@ -118,7 +118,9 @@ def enrich_recommendations(recommendations, node_pools, capacity=None):
             rec.setdefault("node_count", pool_lookup[pool_name])
 
         provider = current_cluster_provider.get() or KUBERNETES_PROVIDER
-        if current_tenant_id.get():
+        if rec.get("operation"):
+            operation = rec["operation"]  # ação já definida pelo analisador (ex.: workload)
+        elif current_tenant_id.get():
             # Modo multiempresa: o cluster do cliente não tem projeto/região GKE
             # cadastrados; usar o config global alteraria o cluster errado.
             operation = _manual_operation(
@@ -143,6 +145,7 @@ def enrich_recommendations(recommendations, node_pools, capacity=None):
             "affected_pods": rec.get("affected_pods", 0),
             "metrics": rec.get("metrics"),
             "operation": operation,
+            "confidence": rec.get("confidence"),
             "requires_approval": REQUIRE_APPROVAL or rec_type in EXECUTABLE_TYPES,
             "auto_execute": False,
             "status": "pending",

@@ -5,7 +5,7 @@ from collectors.kubernetes import (
     get_nodes,
     get_pods,
 )
-from collectors.metrics import get_node_metrics, get_pod_metrics
+from collectors.metrics import get_container_metrics, get_node_metrics, get_pod_metrics
 from collectors.gke import get_node_pools
 
 from analyzers.capacity import analyze_capacity
@@ -49,6 +49,7 @@ def collect_cluster_data():
     events = get_cluster_events()
     node_metrics = get_node_metrics()
     pod_metrics = get_pod_metrics()
+    container_metrics = get_container_metrics()
     node_pools = get_node_pools() if provider == "gke" else []
 
     return {
@@ -57,8 +58,26 @@ def collect_cluster_data():
         "events": events,
         "node_metrics": node_metrics,
         "pod_metrics": pod_metrics,
+        "container_metrics": container_metrics,
         "node_pools": node_pools,
     }
+
+
+def workload_recommendations(pods, container_metrics):
+    """Grava a amostra atual por container e gera rightsizing pelo histórico."""
+    import logging
+
+    from analyzers.workloads import collect_workloads, rightsizing_recommendations
+    from approval.store import load_workload_samples, save_workload_samples
+
+    try:
+        samples, specs = collect_workloads(pods, container_metrics)
+        if samples:
+            save_workload_samples(samples)
+        return rightsizing_recommendations(specs, load_workload_samples(days=14))
+    except Exception as exc:  # rightsizing nunca deve derrubar a avaliação
+        logging.getLogger("capacity-agent").warning("Rightsizing indisponível: %s", exc)
+        return []
 
 
 def evaluate_cluster(data=None):
@@ -113,6 +132,8 @@ def evaluate_cluster(data=None):
             rec["node_count"] = pool_data["capacity"]["node_count"]
             capacity_recommendations.append(rec)
 
+    workload_recs = workload_recommendations(pods, data.get("container_metrics") or {})
+
     scheduling_findings = analyze_scheduling(pods, events)
 
     scheduling_recs = scheduling_recommendations(scheduling_findings)
@@ -121,7 +142,7 @@ def evaluate_cluster(data=None):
         rec["source"] = "scheduling"
 
     all_recommendations = enrich_recommendations(
-        capacity_recommendations + scheduling_recs,
+        capacity_recommendations + workload_recs + scheduling_recs,
         node_pools,
         capacity,
     )
@@ -300,7 +321,8 @@ def apply_history(recommendations, history):
     for rec in recommendations:
         pool_history = history.get(rec.get("pool")) if rec.get("pool") else None
         rec["history"] = pool_history
-        rec["confidence"] = pool_history["confidence"] if pool_history else "baixa"
+        if pool_history or not rec.get("confidence"):
+            rec["confidence"] = pool_history["confidence"] if pool_history else "baixa"
         if pool_history:
             rec["action"] = f"{rec.get('action', '')} ({describe(pool_history)})"
         if rec.get("type") == "UNDERUTILIZED_POOL" and pool_history:

@@ -184,6 +184,15 @@ CREATE TABLE IF NOT EXISTS metric_samples (
     mem_req_pct REAL
 );
 CREATE INDEX IF NOT EXISTS samples_scope_idx ON metric_samples(tenant_id, cluster_id, timestamp);
+CREATE TABLE IF NOT EXISTS workload_samples (
+    tenant_id TEXT NOT NULL,
+    cluster_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    workload TEXT NOT NULL,
+    cpu_m INTEGER NOT NULL,
+    mem_b INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS wsamples_scope_idx ON workload_samples(tenant_id, cluster_id, workload, timestamp);
 CREATE INDEX IF NOT EXISTS audit_tenant_idx ON audit_log(tenant_id, timestamp);
 """
 
@@ -438,3 +447,46 @@ def load_metric_samples(days=14):
         ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+WORKLOAD_SAMPLE_RETENTION_DAYS = 14
+
+
+def save_workload_samples(samples, timestamp=None):
+    """samples: {workload_key: {"cpu_m": int, "mem_b": int}}"""
+    from datetime import timedelta
+
+    tenant_id, cluster_id = _scope()
+    now = timestamp or datetime.now(timezone.utc).isoformat()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=WORKLOAD_SAMPLE_RETENTION_DAYS)).isoformat()
+
+    with _transaction(write=True) as connection:
+        connection.executemany(
+            "INSERT INTO workload_samples(tenant_id, cluster_id, timestamp, workload, cpu_m, mem_b) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [(tenant_id, cluster_id, now, key, int(v["cpu_m"]), int(v["mem_b"])) for key, v in samples.items()],
+        )
+        connection.execute(
+            "DELETE FROM workload_samples WHERE tenant_id = ? AND cluster_id = ? AND timestamp < ?",
+            (tenant_id, cluster_id, cutoff),
+        )
+
+
+def load_workload_samples(days=14):
+    """Retorna {workload_key: [(timestamp, cpu_m, mem_b), ...]} em ordem cronológica."""
+    from datetime import timedelta
+
+    tenant_id, cluster_id = _scope()
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    with _transaction() as connection:
+        rows = connection.execute(
+            "SELECT workload, timestamp, cpu_m, mem_b FROM workload_samples "
+            "WHERE tenant_id = ? AND cluster_id = ? AND timestamp >= ? ORDER BY timestamp",
+            (tenant_id, cluster_id, since),
+        ).fetchall()
+
+    result = {}
+    for row in rows:
+        result.setdefault(row["workload"], []).append((row["timestamp"], row["cpu_m"], row["mem_b"]))
+    return result

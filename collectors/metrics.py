@@ -82,3 +82,24 @@ def get_pod_metrics():
         }
 
     return result
+
+
+def get_container_metrics():
+    """Uso atual por container: {(namespace, pod, container): {cpu_m, mem_b}}."""
+    output = run("kubectl top pods -A --containers --no-headers")
+
+    result = {}
+
+    for line in output.splitlines():
+        cols = line.split()
+        if len(cols) < 5:
+            continue
+        try:
+            result[(cols[0], cols[1], cols[2])] = {
+                "cpu_m": parse_cpu(cols[3]),
+                "mem_b": parse_memory(cols[4]),
+            }
+        except ValueError:
+            continue
+
+    return result
