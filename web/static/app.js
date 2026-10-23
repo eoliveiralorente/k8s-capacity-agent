@@ -499,6 +499,8 @@ function buildRecTable(items, compact = false) {
       const btns = [];
       if (rec.status === "pending" && executable) {
         btns.push(`<button class="btn btn-success btn-sm" data-action="approve" data-id="${rec.id}">Aprovar</button>`);
+      }
+      if (rec.status === "pending") {
         btns.push(`<button class="btn btn-danger btn-sm" data-action="reject" data-id="${rec.id}">Rejeitar</button>`);
       }
       if (rec.status === "approved" && executable) {
