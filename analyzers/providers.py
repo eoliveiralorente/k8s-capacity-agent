@@ -15,6 +15,7 @@ POOL_LABELS = [
     "kubernetes.azure.com/agentpool",       # AKS
     "agentpool",                            # AKS (label legado)
     "doks.digitalocean.com/node-pool",      # DigitalOcean
+    "magnum.openstack.org/nodegroup",       # OpenStack Magnum (SaveInCloud)
     "node-pool",
     "nodepool",
 ]
@@ -35,6 +36,17 @@ PROVIDER_PREFIXES = {
     "vsphere://": "vsphere",
     "kind://": "kind",
 }
+
+
+CONTROL_PLANE_ROLES = {"master", "control-plane"}
+
+
+def is_control_plane(labels):
+    if labels.get("magnum.openstack.org/role") == "master":
+        return True
+    return any(
+        f"node-role.kubernetes.io/{role}" in labels for role in CONTROL_PLANE_ROLES
+    )
 
 
 def node_pool(labels, fallback="worker"):

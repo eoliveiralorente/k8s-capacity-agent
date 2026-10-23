@@ -102,6 +102,10 @@ def evaluate_cluster(data=None):
             pool_data["metrics"],
         )
 
+        if pool_data.get("control_plane"):
+            # Nunca recomendar redução/expansão automática do control plane.
+            pool_recs = [r for r in pool_recs if r.get("type") != "UNDERUTILIZED_POOL"]
+
         for rec in pool_recs:
             rec["source"] = "capacity"
             rec["pool"] = pool_name
@@ -141,7 +145,7 @@ def evaluate_cluster(data=None):
         "nodes": node_count,
         "pods": pod_count,
         "running_pending_pods": running_pending,
-        "node_pools": len(node_pools),
+        "node_pools": len(node_pools) or len(capacity),
         "node_metrics": len(node_metrics),
         "pod_metrics": len(pod_metrics),
         "pending_pods": pending_pods,

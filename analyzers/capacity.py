@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from analyzers.providers import node_pool
+from analyzers.providers import is_control_plane, node_pool
 from collectors.metrics import parse_cpu, parse_memory
 
 
@@ -105,6 +105,7 @@ def analyze_capacity(nodes, pods, node_metrics, pod_metrics):
         "ready_nodes": 0,
         "machine_types": set(),
         "versions": set(),
+        "control_plane": False,
     })
 
     for node in nodes.get("items", []):
@@ -165,6 +166,8 @@ def analyze_capacity(nodes, pods, node_metrics, pod_metrics):
         )
         metadata_bucket = pool_metadata[pool]
         metadata_bucket["ready_nodes"] += int(ready)
+        if is_control_plane(labels):
+            metadata_bucket["control_plane"] = True
         if machine and machine != "-":
             metadata_bucket["machine_types"].add(machine)
         if kubelet_version and kubelet_version != "-":
@@ -337,6 +340,7 @@ def analyze_capacity(nodes, pods, node_metrics, pod_metrics):
             "pool": pool_name,
 
             "capacity": bucket,
+            "control_plane": pool_metadata[pool_name]["control_plane"],
 
             "metrics": calculated_metrics,
             "kubernetes": {
