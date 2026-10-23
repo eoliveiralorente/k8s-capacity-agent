@@ -371,7 +371,7 @@ function renderOverview() {
     <div class="card">
       <div class="card-label">Nodes</div>
       <div class="card-value">${summary.nodes ?? "—"}</div>
-      <div class="card-sub">${summary.node_pools ?? 0} node pools</div>
+      <div class="card-sub" title="Pools com nodes registrados no cluster (API Kubernetes)">${summary.node_pools ?? 0} node pools ativos no cluster</div>
     </div>
     <div class="card">
       <div class="card-label">Pods</div>
