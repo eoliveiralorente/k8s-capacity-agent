@@ -18,6 +18,8 @@ POLICY = [
     ("POST", r"/api/recommendations/[^/]+/(approve|reject)", "operador"),
     ("POST", r"/api/recommendations/[^/]+/execute", "operador"),  # execução real exige admin no endpoint
     ("GET", r"/api/cluster/pod-logs", "operador"),  # logs podem conter dados sensíveis
+    ("POST", r"/api/clusters/agent", "admin"),
+    ("POST", r"/api/clusters/[^/]+/rotate-token", "admin"),
     ("GET", r"/api/users", "admin"),
     ("POST", r"/api/invites", "admin"),
     ("PATCH", r"/api/users/[^/]+", "admin"),

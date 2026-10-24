@@ -25,7 +25,28 @@ from analyzers.scheduling import (
 )
 
 from engine.recommendations import enrich_recommendations
-from tenant_context import current_cluster_name, current_cluster_provider
+from tenant_context import current_cluster_mode, current_cluster_name, current_cluster_provider
+
+
+SNAPSHOT_STALE_MINUTES = 60
+
+
+def agent_snapshot_data():
+    """Dados do último snapshot enviado pelo coletor (modo agente)."""
+    from datetime import datetime, timezone
+
+    from approval.store import load_cluster_snapshot
+    from collectors.snapshot import snapshot_to_data
+
+    snapshot = load_cluster_snapshot()
+    if not snapshot:
+        raise RuntimeError("O coletor ainda não enviou dados deste cluster. Verifique a instalação do agente.")
+    received = datetime.fromisoformat(snapshot["_received_at"])
+    age_min = (datetime.now(timezone.utc) - received).total_seconds() / 60
+    data = snapshot_to_data(snapshot)
+    data["snapshot_age_minutes"] = round(age_min, 1)
+    data["snapshot_stale"] = age_min > SNAPSHOT_STALE_MINUTES
+    return data
 
 
 def count_running_pending_pods(pods):
@@ -43,6 +64,9 @@ def count_running_pending_pods(pods):
 
 
 def collect_cluster_data():
+
+    if current_cluster_mode.get() == "agent":
+        return agent_snapshot_data()
 
     provider = current_cluster_provider.get() or KUBERNETES_PROVIDER
     nodes = get_nodes()
@@ -153,6 +177,13 @@ def evaluate_cluster(data=None):
         all_recommendations,
         scheduling_findings,
     )
+
+    if data.get("snapshot_stale"):
+        decision["allowed"] = False
+        decision["reasons"].append(
+            f"Dados do coletor desatualizados ({data.get('snapshot_age_minutes')} min). "
+            "Verifique se o agente está rodando no cluster."
+        )
 
     pending_pods = len({
         (item["namespace"], item["pod"])
@@ -360,11 +391,21 @@ def run_evaluation(source="cli", actor=None):
 
     result = evaluate_cluster()
     provider = current_cluster_provider.get() or KUBERNETES_PROVIDER
-    cluster = (
-        get_current_context()
-        if provider != "gke"
-        else current_cluster_name.get() or CLUSTER
-    )
+    if current_cluster_mode.get() == "agent" or current_cluster_name.get():
+        cluster = current_cluster_name.get() or CLUSTER
+    elif provider != "gke":
+        cluster = get_current_context()
+    else:
+        cluster = CLUSTER
+
+    if current_cluster_mode.get() == "agent":
+        # Modo agente é somente leitura: nenhuma ação executável pelo painel.
+        for rec in result["recommendations"]:
+            op = rec.get("operation") or {}
+            if op.get("executable"):
+                rec["operation"] = {**op, "kind": "manual_review", "executable": False,
+                                    "params": {**op.get("params", {}),
+                                               "reason": "Cluster conectado via agente (somente leitura): aplique pelo GitOps/kubectl"}}
     evaluation_id = new_evaluation_id()
 
     save_metric_samples(result["capacity"])

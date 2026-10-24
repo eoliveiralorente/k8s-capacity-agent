@@ -193,6 +193,14 @@ CREATE TABLE IF NOT EXISTS workload_samples (
     mem_b INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS wsamples_scope_idx ON workload_samples(tenant_id, cluster_id, workload, timestamp);
+CREATE TABLE IF NOT EXISTS cluster_snapshots (
+    tenant_id TEXT NOT NULL,
+    cluster_id TEXT NOT NULL,
+    received_at TEXT NOT NULL,
+    collected_at TEXT,
+    data BLOB NOT NULL,
+    PRIMARY KEY (tenant_id, cluster_id)
+);
 CREATE INDEX IF NOT EXISTS audit_tenant_idx ON audit_log(tenant_id, timestamp);
 """
 
@@ -490,3 +498,35 @@ def load_workload_samples(days=14):
     for row in rows:
         result.setdefault(row["workload"], []).append((row["timestamp"], row["cpu_m"], row["mem_b"]))
     return result
+
+
+# ── Snapshots enviados pelo coletor in-cluster ─────────────────
+
+def save_cluster_snapshot(snapshot):
+    import gzip
+
+    tenant_id, cluster_id = _scope()
+    blob = gzip.compress(json.dumps(snapshot, ensure_ascii=False).encode("utf-8"))
+    with _transaction(write=True) as connection:
+        connection.execute(
+            "INSERT OR REPLACE INTO cluster_snapshots(tenant_id, cluster_id, received_at, collected_at, data) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (tenant_id, cluster_id, datetime.now(timezone.utc).isoformat(),
+             snapshot.get("collected_at"), blob),
+        )
+
+
+def load_cluster_snapshot():
+    import gzip
+
+    tenant_id, cluster_id = _scope()
+    with _transaction() as connection:
+        row = connection.execute(
+            "SELECT received_at, data FROM cluster_snapshots WHERE tenant_id = ? AND cluster_id = ?",
+            (tenant_id, cluster_id),
+        ).fetchone()
+    if not row:
+        return None
+    snapshot = json.loads(gzip.decompress(row["data"]).decode("utf-8"))
+    snapshot["_received_at"] = row["received_at"]
+    return snapshot

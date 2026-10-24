@@ -490,6 +490,17 @@ def cmd_cenario_doc(args):
     return 0
 
 
+def cmd_collect(args):
+    """Coletor in-cluster (modo agente): envia snapshots ao painel."""
+    from collectors.snapshot import run_collector
+
+    panel_url = args.panel_url or os.environ.get("CAPACITY_AGENT_PANEL_URL", "")
+    token = os.environ.get("CAPACITY_AGENT_INGEST_TOKEN", "")
+    interval = args.interval or int(os.environ.get("CAPACITY_AGENT_COLLECT_SECONDS", "900"))
+    print(f"[collector] painel={panel_url or '(não definido)'} intervalo={interval}s once={args.once}", flush=True)
+    return run_collector(panel_url, token, interval_seconds=interval, once=args.once)
+
+
 def build_parser():
 
     parser = argparse.ArgumentParser(
@@ -635,6 +646,14 @@ def build_parser():
         help="Arquivo HTML de saída (padrão: mesmo nome do .md com extensão .html)",
     )
 
+    collect_parser = subparsers.add_parser(
+        "collect",
+        help="Coletor in-cluster: envia snapshots ao painel (token em CAPACITY_AGENT_INGEST_TOKEN)",
+    )
+    collect_parser.add_argument("--panel-url", help="URL do painel (ou CAPACITY_AGENT_PANEL_URL)")
+    collect_parser.add_argument("--interval", type=int, help="Segundos entre envios (padrão 900)")
+    collect_parser.add_argument("--once", action="store_true", help="Envia um snapshot e sai")
+
     return parser
 
 
@@ -654,6 +673,7 @@ def main():
         "report": cmd_report,
         "relatorio": cmd_relatorio,
         "cenario-doc": cmd_cenario_doc,
+        "collect": cmd_collect,
     }
 
     if args.command is None:

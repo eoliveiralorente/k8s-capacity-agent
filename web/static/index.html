@@ -168,12 +168,23 @@
               <button class="btn btn-primary" type="submit">Conectar cluster</button>
             </div>
           </form>
+          <form id="agent-cluster-form" class="cluster-form">
+            <div class="form-group">
+              <label for="agent-cluster-name">Ou conectar via agente (sem kubeconfig, somente leitura)</label>
+              <input id="agent-cluster-name" name="name" maxlength="100" placeholder="Ex.: Cliente X - Produção" required>
+            </div>
+            <div class="cluster-form-actions">
+              <span class="form-hint">Gera um token e o comando Helm para instalar o coletor no cluster.</span>
+              <button class="btn btn-ghost" type="submit">Gerar instalação do agente</button>
+            </div>
+          </form>
         </div>
         <div class="panel">
           <div class="panel-header">
             <h3>Nodes do cluster</h3>
             <div class="cluster-actions">
               <button class="btn btn-ghost btn-sm" id="btn-refresh-cluster" type="button">Atualizar dados</button>
+              <button class="btn btn-ghost btn-sm hidden" id="btn-rotate-token" type="button">Gerar novo token do agente</button>
               <button class="btn btn-danger btn-sm" id="btn-delete-cluster" type="button">Remover conexão</button>
             </div>
           </div>

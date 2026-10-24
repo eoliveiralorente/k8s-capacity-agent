@@ -54,6 +54,8 @@ def sample_all():
     for cluster in list_all_clusters():
         if _stop.is_set():
             return
+        if cluster.get("mode") == "agent":
+            continue  # o coletor in-cluster envia as próprias amostras
         try:
             sample_cluster(cluster["tenant_id"], cluster["id"], cluster["name"])
         except Exception as exc:  # um cluster com falha não interrompe os outros

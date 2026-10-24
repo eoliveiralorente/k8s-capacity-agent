@@ -63,18 +63,7 @@ def run(command):
     return result.stdout.strip()
 
 
-def get_cluster_overview():
-    context = get_current_context()
-    nodes_result = _run_process(
-        ["kubectl", "get", "nodes", "-o", "json"],
-        capture_output=True,
-        text=True,
-    )
-    if nodes_result.returncode != 0:
-        detail = nodes_result.stderr.strip() or "Não foi possível consultar os nodes"
-        raise RuntimeError(detail)
-
-    node_data = json.loads(nodes_result.stdout)
+def parse_nodes_overview(node_data):
     nodes = []
     for node in node_data.get("items", []):
         metadata = node.get("metadata", {})
@@ -98,44 +87,10 @@ def get_cluster_overview():
             "version": status.get("nodeInfo", {}).get("kubeletVersion", "—"),
         })
 
-    return {
-        "context": context,
-        "nodes": nodes,
-        "kubeconfig_configured": bool(KUBECONFIG),
-    }
+    return nodes
 
 
-def run_checked(args, what, timeout=60):
-    """Executa kubectl sem shell e levanta erro claro em vez de devolver vazio."""
-    try:
-        result = _run_process(args, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"Tempo esgotado ao consultar {what}") from exc
-    if result.returncode != 0:
-        detail = result.stderr.strip() or f"Não foi possível consultar {what}"
-        raise RuntimeError(detail[:1000])
-    return result.stdout
-
-
-def get_nodes():
-    return json.loads(run_checked(["kubectl", "get", "nodes", "-o", "json"], "os nodes"))
-
-
-def get_pods():
-    return json.loads(run_checked(["kubectl", "get", "pods", "-A", "-o", "json"], "os pods", timeout=120))
-
-
-def get_cluster_pods():
-    result = _run_process(
-        ["kubectl", "get", "pods", "--all-namespaces", "-o", "json"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        detail = result.stderr.strip() or "Não foi possível consultar os pods"
-        raise RuntimeError(detail)
-
-    pod_data = json.loads(result.stdout)
+def parse_cluster_pods(pod_data):
     pods = []
     for item in pod_data.get("items", []):
         metadata = item.get("metadata", {})
@@ -183,6 +138,59 @@ def get_cluster_pods():
         })
 
     return pods
+
+
+def get_cluster_overview():
+    context = get_current_context()
+    nodes_result = _run_process(
+        ["kubectl", "get", "nodes", "-o", "json"],
+        capture_output=True,
+        text=True,
+    )
+    if nodes_result.returncode != 0:
+        detail = nodes_result.stderr.strip() or "Não foi possível consultar os nodes"
+        raise RuntimeError(detail)
+
+    nodes = parse_nodes_overview(json.loads(nodes_result.stdout))
+
+    return {
+        "context": context,
+        "nodes": nodes,
+        "kubeconfig_configured": bool(KUBECONFIG),
+    }
+
+
+def run_checked(args, what, timeout=60):
+    """Executa kubectl sem shell e levanta erro claro em vez de devolver vazio."""
+    try:
+        result = _run_process(args, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"Tempo esgotado ao consultar {what}") from exc
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"Não foi possível consultar {what}"
+        raise RuntimeError(detail[:1000])
+    return result.stdout
+
+
+def get_nodes():
+    return json.loads(run_checked(["kubectl", "get", "nodes", "-o", "json"], "os nodes"))
+
+
+def get_pods():
+    return json.loads(run_checked(["kubectl", "get", "pods", "-A", "-o", "json"], "os pods", timeout=120))
+
+
+def get_cluster_pods():
+    result = _run_process(
+        ["kubectl", "get", "pods", "--all-namespaces", "-o", "json"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "Não foi possível consultar os pods"
+        raise RuntimeError(detail)
+
+    return parse_cluster_pods(json.loads(result.stdout))
 
 
 def get_cluster_pod_logs(namespace, pod_name, container=None, previous=False):
