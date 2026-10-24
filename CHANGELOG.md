@@ -24,5 +24,5 @@
 - Qualquer cloud ou on-premises; detecção de node pools por provedor.
 - Três modos: self-hosted no cluster (Helm), painel central + coletor (somente saída) e kubeconfig.
 - Multiusuário com convites, papéis e auditoria; licença offline Ed25519; pacote de suporte sem segredos.
-- Cabeçalhos de segurança (CSP, HSTS, X-Frame-Options), imagem sem root, kubectl fixado.
+- Cabeçalhos de segurança (CSP, HSTS, X-Frame-Options), imagem sem root, kubectl no último patch estável a cada build.
 - Ambiente de demonstração com dados fictícios (`agent.py demo`).
