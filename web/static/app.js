@@ -95,6 +95,8 @@ function can(role) {
 
 function applyRoleUi() {
   document.getElementById("nav-users").classList.toggle("hidden", !can("admin"));
+  document.getElementById("nav-support").classList.toggle("hidden", !can("operador"));
+  document.getElementById("btn-support-bundle").classList.toggle("hidden", !can("admin"));
   const evaluate = document.getElementById("btn-evaluate");
   if (evaluate) evaluate.classList.toggle("hidden", !can("operador"));
   const clusterForm = document.getElementById("cluster-form");
@@ -239,6 +241,7 @@ function switchTab(tab) {
     audit: "Auditoria",
     users: "Usuários",
     assistant: "Assistente IA",
+    support: "Suporte",
   };
   document.getElementById("page-title").textContent = titles[tab] || tab;
   if (tab === "users" && can("admin")) {
@@ -247,6 +250,7 @@ function switchTab(tab) {
     loadAlertsConfig();
   }
   if (tab === "assistant") loadAssistantConfig().catch(() => {});
+  if (tab === "support") loadSupportHealth();
   if (tab === "cluster" && state.selectedClusterId) {
     loadClusterPods().catch((error) => {
       state.podError = error.message;
@@ -1591,6 +1595,55 @@ document.getElementById("chat-form").addEventListener("submit", async (event) =>
 document.getElementById("chat-clear").addEventListener("click", () => {
   chatHistory.length = 0;
   renderChat();
+});
+
+// ── Suporte ─────────────────────────────────────────────────
+
+const HEALTH_BADGE = { ok: "badge-executed", aviso: "badge-pending", erro: "badge-rejected" };
+
+async function loadSupportHealth() {
+  const el = document.getElementById("support-health");
+  el.innerHTML = `<div class="empty-state"><p>Verificando…</p></div>`;
+  try {
+    const h = await API.get("/support/health");
+    el.innerHTML = `
+      <p>Versão <strong>${escapeHtml(h.version)}</strong> · no ar há ${h.uptime_minutes} min ·
+        situação geral <span class="badge ${HEALTH_BADGE[h.status]}">${escapeHtml(h.status.toUpperCase())}</span></p>
+      <table>
+        <thead><tr><th>Verificação</th><th>Status</th><th>Detalhe</th><th>O que fazer</th></tr></thead>
+        <tbody>${h.checks.map((c) => `
+          <tr>
+            <td>${escapeHtml(c.name)}</td>
+            <td><span class="badge ${HEALTH_BADGE[c.status]}">${escapeHtml(c.status.toUpperCase())}</span></td>
+            <td style="max-width:420px">${escapeHtml(c.detail || "")}</td>
+            <td style="max-width:320px;color:var(--text-muted)">${c.status === "ok" ? "" : escapeHtml(c.hint || "")}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>`;
+  } catch (e) {
+    el.innerHTML = `<div class="empty-state"><p>${escapeHtml(e.message)}</p></div>`;
+  }
+}
+
+document.getElementById("btn-health-refresh").addEventListener("click", loadSupportHealth);
+
+document.getElementById("btn-support-bundle").addEventListener("click", async () => {
+  try {
+    const res = await fetch("/api/support/bundle", {
+      headers: state.selectedClusterId ? { "X-Cluster-Id": state.selectedClusterId } : {},
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Erro ${res.status}`);
+    const blob = await res.blob();
+    const name = (res.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/)?.[1] || "capacity-agent-suporte.zip";
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = name;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    toast("Pacote de suporte gerado", "success");
+  } catch (e) {
+    toast(e.message, "error");
+  }
 });
 
 // ── Usuários e convites ─────────────────────────────────────

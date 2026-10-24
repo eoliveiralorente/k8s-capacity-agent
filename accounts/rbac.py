@@ -28,6 +28,8 @@ POLICY = [
     ("GET", r"/api/alerts/config", "admin"),
     ("PUT", r"/api/alerts/config", "admin"),
     ("POST", r"/api/alerts/test", "admin"),
+    ("GET", r"/api/support/health", "operador"),
+    ("GET", r"/api/support/bundle", "admin"),
     ("GET", r"/api/users", "admin"),
     ("POST", r"/api/invites", "admin"),
     ("PATCH", r"/api/users/[^/]+", "admin"),

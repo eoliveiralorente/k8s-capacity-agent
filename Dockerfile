@@ -1,10 +1,13 @@
 FROM python:3.12-slim
 
+ARG CAPACITY_AGENT_VERSION=dev
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     CAPACITY_AGENT_PROVIDER=kubernetes \
     CAPACITY_AGENT_STATE_DIR=/data/state \
-    CAPACITY_AGENT_ACCOUNT_DB=/data/accounts.sqlite3
+    CAPACITY_AGENT_ACCOUNT_DB=/data/accounts.sqlite3 \
+    CAPACITY_AGENT_VERSION=${CAPACITY_AGENT_VERSION}
 
 WORKDIR /app
 
@@ -32,7 +35,7 @@ RUN set -eux; \
 COPY requirements.txt ./
 RUN python -m pip install --no-cache-dir --requirement requirements.txt
 
-COPY agent.py config.py tenant_context.py ./
+COPY agent.py config.py tenant_context.py version.py ./
 COPY accounts/ ./accounts/
 COPY analyzers/ ./analyzers/
 COPY approval/ ./approval/
@@ -44,6 +47,7 @@ COPY web/ ./web/
 COPY licensing/ ./licensing/
 COPY assistant/ ./assistant/
 COPY alerts/ ./alerts/
+COPY support/ ./support/
 
 RUN chmod -R a+rX /app \
     && mkdir -p /data \

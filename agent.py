@@ -501,6 +501,20 @@ def cmd_collect(args):
     return run_collector(panel_url, token, interval_seconds=interval, once=args.once)
 
 
+def cmd_support_bundle(args):
+    """Gera o pacote de suporte pela linha de comando (útil se o painel não abre)."""
+    from support.bundle import build_bundle
+
+    data = build_bundle()
+    if args.output == "-":
+        sys.stdout.buffer.write(data)
+    else:
+        with open(args.output, "wb") as handle:
+            handle.write(data)
+        print(f"Pacote de suporte gravado em {args.output} ({len(data) // 1024} KB)")
+    return 0
+
+
 def build_parser():
 
     parser = argparse.ArgumentParser(
@@ -654,6 +668,10 @@ def build_parser():
     collect_parser.add_argument("--interval", type=int, help="Segundos entre envios (padrão 900)")
     collect_parser.add_argument("--once", action="store_true", help="Envia um snapshot e sai")
 
+    bundle_parser = subparsers.add_parser("support-bundle", help="Gerar pacote de suporte (.zip sem segredos)")
+    bundle_parser.add_argument("-o", "--output", default="capacity-agent-suporte.zip",
+                               help="Arquivo de saída (use - para stdout)")
+
     return parser
 
 
@@ -674,6 +692,7 @@ def main():
         "relatorio": cmd_relatorio,
         "cenario-doc": cmd_cenario_doc,
         "collect": cmd_collect,
+        "support-bundle": cmd_support_bundle,
     }
 
     if args.command is None:

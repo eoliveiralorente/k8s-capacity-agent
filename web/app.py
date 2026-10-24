@@ -173,6 +173,9 @@ async def disable_dashboard_asset_caching(request: Request, call_next):
 
 @app.on_event("startup")
 def startup():
+    from support.logbuffer import install as install_log_buffer
+
+    install_log_buffer()
     initialize_database()
     from engine import sampler
     sampler.start()
@@ -211,7 +214,9 @@ def _ensure_incluster(user):
 def healthz():
     from engine import sampler
 
-    return {"status": "ok", "single_tenant": SINGLE_TENANT, "incluster": INCLUSTER,
+    from version import VERSION
+
+    return {"status": "ok", "version": VERSION, "single_tenant": SINGLE_TENANT, "incluster": INCLUSTER,
             "sampler_minutes": sampler.SAMPLE_MINUTES}
 
 
@@ -351,6 +356,26 @@ def api_save_costs(body: CostSettingsRequest):
     save_cost_settings(user["tenant_id"], body.cpu_month, body.gb_month)
     append_audit("cost_settings", {"cpu_month": body.cpu_month, "gb_month": body.gb_month, "by": _actor()})
     return get_cost_settings(user["tenant_id"])
+
+
+@app.get("/api/support/health")
+def api_support_health():
+    from support.health import run_checks
+
+    return run_checks()
+
+
+@app.get("/api/support/bundle")
+def api_support_bundle():
+    from datetime import datetime, timezone
+
+    from support.bundle import build_bundle
+
+    data = build_bundle()
+    append_audit("support_bundle", {"by": _actor(), "bytes": len(data)})
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    return Response(content=data, media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="capacity-agent-suporte-{stamp}.zip"'})
 
 
 class LicenseUpload(BaseModel):

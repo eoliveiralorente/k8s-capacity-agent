@@ -73,6 +73,7 @@
         <button class="nav-item" data-tab="scheduling">Scheduling</button>
         <button class="nav-item" data-tab="assistant">Assistente IA</button>
         <button class="nav-item" data-tab="audit">Auditoria</button>
+        <button class="nav-item hidden" data-tab="support" id="nav-support">Suporte</button>
         <button class="nav-item hidden" data-tab="users" id="nav-users">Usuários</button>
         <a class="nav-item nav-link" href="/relatorio" target="_blank">Relatório Gerencial ↗</a>
       </nav>
@@ -471,6 +472,28 @@
                 <button class="btn btn-primary" type="submit">Salvar configuração</button>
               </div>
             </form>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="tab-support">
+        <div class="panel">
+          <div class="panel-header"><h3>Saúde da instalação</h3>
+            <div class="cluster-actions">
+              <button class="btn btn-ghost btn-sm" id="btn-health-refresh" type="button">Verificar novamente</button>
+              <button class="btn btn-primary btn-sm hidden" id="btn-support-bundle" type="button">Baixar pacote de suporte</button>
+            </div>
+          </div>
+          <div class="panel-body" id="support-health"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h3>Como pedir suporte</h3></div>
+          <div class="panel-body">
+            <ol>
+              <li>Clique em <strong>Baixar pacote de suporte</strong> (admin). O arquivo não contém senhas, chaves, kubeconfigs nem logs das aplicações.</li>
+              <li>Abra um chamado descrevendo o problema, o horário e anexe o pacote.</li>
+              <li>Se o painel não abrir: <code>kubectl -n capacity-agent exec deploy/capacity-agent -- python agent.py support-bundle -o - &gt; suporte.zip</code></li>
+            </ol>
           </div>
         </div>
       </section>
