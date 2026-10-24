@@ -30,9 +30,17 @@ def build_overview(report):
 
     nodes = report.get("nodes_usage") or []
     summary = report.get("summary") or {}
-    alerts = sorted(build_alerts(report), key=lambda a: SEVERITY_ORDER.get(a["severity"], 9))
+    alerts = build_alerts(report)
+    # Recomendação HIGH é "algo a ajustar", não incidente: na nota conta como atenção.
+    # Riscos críticos são só os operacionais (node, pod quebrado, coletor parado).
+    for a in alerts:
+        if a["key"].startswith("rec:"):
+            a["severity"] = "MEDIUM"
+            a["title"] = a["title"].replace("Recomendação crítica: ", "Ajuste recomendado: ")
+    alerts.sort(key=lambda a: (SEVERITY_ORDER.get(a["severity"], 9), a["key"].startswith("rec:")))
     high = [a for a in alerts if a["severity"] == "HIGH"]
-    medium = [a for a in alerts if a["severity"] == "MEDIUM"]
+    medium = [a for a in alerts if a["severity"] == "MEDIUM" and not a["key"].startswith("rec:")]
+    rec_alerts = [a for a in alerts if a["key"].startswith("rec:")]
 
     factors = []
 
@@ -42,6 +50,7 @@ def build_overview(report):
 
     penalty(min(60, 20 * len(high)), f"{len(high)} risco(s) crítico(s)")
     penalty(min(21, 7 * len(medium)), f"{len(medium)} ponto(s) de atenção")
+    penalty(min(15, 3 * len(rec_alerts)), f"{len(rec_alerts)} ajuste(s) de alta prioridade pendente(s)")
     failed_checks = [c for c in (report.get("health") or {}).get("checks", []) if c.get("status") != "OK"]
     penalty(min(20, 10 * len(failed_checks)), "cobertura de métricas incompleta")
 
@@ -76,9 +85,10 @@ def build_overview(report):
     if high:
         headline = f"{len(high)} risco(s) crítico(s) exige(m) ação agora"
         explanation = high[0]["title"] + ". " + high[0]["detail"]
-    elif medium:
+    elif medium or rec_alerts:
+        first = (medium or rec_alerts)[0]
         headline = "Cluster operando, com pontos de atenção"
-        explanation = medium[0]["title"] + ". " + medium[0]["detail"]
+        explanation = first["title"] + ". " + first["detail"]
     elif savings_total > 0 and costs_on:
         headline = f"Cluster saudável, com {_fmt_brl(savings_total)}/mês de economia possível"
         explanation = "Nenhum risco ativo. As maiores economias estão listadas abaixo, prontas para aprovação."

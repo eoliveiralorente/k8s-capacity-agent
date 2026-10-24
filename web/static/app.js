@@ -1448,6 +1448,8 @@ function renderExecutiveOverview() {
     let btn = "";
     if (r.key.startsWith("node-")) btn = `<button class="btn btn-ghost btn-sm" data-risk-node="${escapeHtml(r.key.split(":").slice(1).join(":"))}">Ver node</button>`;
     else if (r.key.startsWith("pod:")) btn = `<button class="btn btn-ghost btn-sm" data-risk-ai="${i}">Diagnosticar com IA</button>`;
+    else if (r.key.startsWith("rec:")) btn = `<button class="btn btn-ghost btn-sm" data-risk-goto="recommendations">Ver recomendação</button>`;
+    else if (r.key === "agent-stale") btn = `<button class="btn btn-ghost btn-sm" data-risk-goto="cluster">Ver conexão</button>`;
     else btn = `<button class="btn btn-ghost btn-sm" data-risk-goto="scheduling">Ver scheduling</button>`;
     return `
       <div class="ov-item">

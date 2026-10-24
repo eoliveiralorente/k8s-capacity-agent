@@ -44,6 +44,17 @@ class ScoreTest(unittest.TestCase):
         self.assertIn("crítico", o["headline"])
         self.assertEqual(o["kpis"]["pods_ok_pct"], 70.0)
 
+    def test_high_recommendations_count_as_attention(self):
+        recs = [{"id": f"r{i}", "type": "INCREASE_REQUESTS", "severity": "HIGH", "status": "pending",
+                 "pool": "kube-system/x", "action": "Ajustar"} for i in range(5)]
+        report = {"nodes_usage": [node("a", 40.0, 60.0)], "summary": {"pods": 20, "pending_pods": 0},
+                  "health": {"checks": []}, "recommendations": recs}
+        o = build_overview(report)
+        self.assertEqual(o["kpis"]["risks_high"], 0)
+        self.assertEqual(o["status"], "Saudável")
+        self.assertEqual(o["score"], 85)
+        self.assertTrue(o["top_risks"][0]["title"].startswith("Ajuste recomendado"))
+
 
 if __name__ == "__main__":
     unittest.main()
