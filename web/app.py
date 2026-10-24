@@ -770,6 +770,33 @@ def api_cluster():
     }
 
 
+@app.get("/api/cluster/nodes/{node_name}")
+def api_cluster_node_detail(node_name: str):
+    from analyzers.node_detail import build_node_detail
+
+    if not current_cluster_id.get():
+        raise HTTPException(status_code=409, detail="Cadastre ou selecione um cluster")
+    if len(node_name) > 253 or not re.fullmatch(r"[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?", node_name):
+        raise HTTPException(status_code=422, detail="Nome de node inválido")
+    try:
+        if current_cluster_mode.get() == "agent":
+            snapshot = _agent_snapshot_or_409()
+            nodes, pods = snapshot["nodes"], snapshot["pods"]
+            node_metrics, pod_metrics = snapshot.get("node_metrics") or {}, snapshot.get("pod_metrics") or {}
+        else:
+            from collectors.kubernetes import get_nodes, get_pods
+            from collectors.metrics import get_node_metrics, get_pod_metrics
+
+            nodes, pods = get_nodes(), get_pods()
+            node_metrics, pod_metrics = get_node_metrics(), get_pod_metrics()
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=f"Falha ao consultar o cluster: {exc}") from exc
+    detail = build_node_detail(node_name, nodes, pods, node_metrics, pod_metrics)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Node não encontrado")
+    return detail
+
+
 @app.get("/api/cluster/pods")
 def api_cluster_pods(namespace: str | None = None):
     if not current_cluster_id.get():

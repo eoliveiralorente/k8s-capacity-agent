@@ -131,6 +131,30 @@ def tool_scheduling(args, _ctx):
     return {"causas": report.get("scheduling", {}).get("causes"), "achados": findings[:30]}
 
 
+def tool_node_details(args, _ctx):
+    from analyzers.node_detail import build_node_detail
+
+    name = (args or {}).get("node")
+    if not name:
+        return {"erro": "Informe o node"}
+    if current_cluster_mode.get() == "agent":
+        from approval.store import load_cluster_snapshot
+
+        snap = load_cluster_snapshot() or {}
+        nodes, pods = snap.get("nodes") or {"items": []}, snap.get("pods") or {"items": []}
+        node_metrics, pod_metrics = snap.get("node_metrics") or {}, snap.get("pod_metrics") or {}
+    else:
+        from collectors.kubernetes import get_nodes, get_pods
+        from collectors.metrics import get_node_metrics, get_pod_metrics
+
+        nodes, pods, node_metrics, pod_metrics = get_nodes(), get_pods(), get_node_metrics(), get_pod_metrics()
+    detail = build_node_detail(name, nodes, pods, node_metrics, pod_metrics)
+    if not detail:
+        return {"erro": f"Node {name} não encontrado"}
+    detail["pods"] = detail["pods"][:40]
+    return detail
+
+
 TOOLS = {
     "resumo_cluster": (tool_cluster_summary,
                        "Resumo da última avaliação: nodes, pods, saúde das métricas, decisão, consumo por node.",
@@ -145,6 +169,9 @@ TOOLS = {
                  "Últimas linhas de log de um container (use previous=true para a execução anterior a um crash).",
                  {"namespace": {"type": "string"}, "pod": {"type": "string"},
                   "container": {"type": "string"}, "previous": {"type": "boolean"}}),
+    "detalhes_node": (tool_node_details,
+                      "Detalhe de um node: capacidade, uso, taints, condições e pods que rodam nele (uso x requests).",
+                      {"node": {"type": "string"}}),
     "recomendacoes": (tool_recommendations,
                       "Recomendações atuais da ferramenta (capacity, rightsizing, scheduling) e seus status.",
                       {"status": {"type": "string", "enum": ["pending", "approved", "rejected", "executed", "failed"]}}),
@@ -152,7 +179,7 @@ TOOLS = {
                            "Causas e achados de problemas de agendamento (Pending, imagem, PVC, secret, recursos).",
                            {"namespace": {"type": "string"}}),
 }
-REQUIRED = {"detalhes_pod": ["namespace", "pod"], "logs_pod": ["namespace", "pod"]}
+REQUIRED = {"detalhes_pod": ["namespace", "pod"], "logs_pod": ["namespace", "pod"], "detalhes_node": ["node"]}
 
 
 def tool_schemas():

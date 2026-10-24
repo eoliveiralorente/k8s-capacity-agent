@@ -141,7 +141,13 @@ def parse_cluster_pods(pod_data):
 
 
 def get_cluster_overview():
-    context = get_current_context()
+    try:
+        context = get_current_context()
+    except RuntimeError:
+        # Dentro do cluster (ServiceAccount) não há "current-context" de kubeconfig.
+        if not os.getenv("KUBERNETES_SERVICE_HOST"):
+            raise
+        context = "in-cluster"
     nodes_result = _run_process(
         ["kubectl", "get", "nodes", "-o", "json"],
         capture_output=True,

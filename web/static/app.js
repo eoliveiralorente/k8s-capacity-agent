@@ -1344,7 +1344,7 @@ function renderNodesUsage() {
       <thead><tr><th>Node</th><th>Pool</th><th>Pods</th><th>CPU uso</th><th>CPU reservado</th><th>Memória uso</th><th>Memória reservada</th></tr></thead>
       <tbody>${nodes.map((n) => `
         <tr>
-          <td><strong>${escapeHtml(n.name)}</strong>${n.control_plane ? ' <span class="badge badge-manual">control plane</span>' : ""}${n.ready ? "" : ' <span class="badge badge-rejected">NotReady</span>'}</td>
+          <td><button class="btn btn-ghost btn-sm" data-node="${escapeHtml(n.name)}" title="Ver o que roda neste node"><strong>${escapeHtml(n.name)}</strong> ›</button>${n.control_plane ? ' <span class="badge badge-manual">control plane</span>' : ""}${n.ready ? "" : ' <span class="badge badge-rejected">NotReady</span>'}</td>
           <td>${escapeHtml(n.pool)}</td>
           <td>${n.pod_count}${n.pods_capacity ? ` <span style="color:var(--text-muted);font-size:11px">/ ${n.pods_capacity}</span>` : ""}</td>
           <td>${usageBar("uso", n.cpu_usage_pct)}</td>
@@ -1354,7 +1354,72 @@ function renderNodesUsage() {
         </tr>`).join("")}
       </tbody>
     </table>
-    <p style="color:var(--text-muted);font-size:12px;margin-top:8px">Percentuais sobre o allocatable de cada node. "Uso" = consumo real agora (metrics-server); "reservado" = soma dos requests dos pods no node.</p>`;
+    <p style="color:var(--text-muted);font-size:12px;margin-top:8px">Clique em um node para ver os pods e serviços dele. Percentuais sobre o allocatable de cada node. "Uso" = consumo real agora (metrics-server); "reservado" = soma dos requests dos pods no node.</p>`;
+}
+
+document.getElementById("nodes-usage").addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-node]");
+  if (btn) showNodeDetail(btn.dataset.node);
+});
+
+function fmtNum(v, unit) {
+  return v === null || v === undefined ? "—" : `${v}${unit}`;
+}
+
+async function showNodeDetail(name) {
+  openModalWithSize(`Node ${name}`, `<div class="empty-state"><p>Carregando…</p></div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`, true);
+  let d;
+  try {
+    d = await API.get(`/cluster/nodes/${encodeURIComponent(name)}`);
+  } catch (e) {
+    document.getElementById("modal-body").innerHTML = `<div class="empty-state"><p>${escapeHtml(e.message)}</p></div>`;
+    return;
+  }
+  const u = d.usage || {};
+  const labels = Object.entries(d.labels || {}).map(([k, v]) => `${escapeHtml(k.split("/").pop())}: ${escapeHtml(v)}`).join(" · ");
+  const alerts = [
+    ...(d.conditions_alert || []).map((c) => `${escapeHtml(c.type)}=${escapeHtml(c.status)} ${escapeHtml(c.reason || "")}`),
+    ...(d.unschedulable ? ["Node marcado como não agendável (cordon)"] : []),
+    ...(d.pods_without_requests ? [`${d.pods_without_requests} pod(s) sem request de CPU/memória — o scheduler não enxerga esse consumo`] : []),
+  ];
+  const body = `
+    <p><strong>${escapeHtml(d.pool || "—")}</strong>${d.control_plane ? ' <span class="badge badge-manual">control plane</span>' : ""}
+      ${d.ready ? '<span class="badge badge-executed">Ready</span>' : '<span class="badge badge-rejected">NotReady</span>'}
+      <span style="color:var(--text-muted);font-size:12px"> · kubelet ${escapeHtml(d.kubelet || "—")} · ${escapeHtml(d.runtime || "")} ${labels ? "· " + labels : ""}</span></p>
+    ${alerts.length ? `<div class="panel" style="border-color:var(--warn, #d97706)"><div class="panel-body">${alerts.map((a) => `⚠ ${a}`).join("<br>")}</div></div>` : ""}
+    <div class="grid-2" style="margin:12px 0">
+      <div>${usageBar("CPU uso", u.cpu_usage_pct)}${usageBar("CPU reservado", u.cpu_req_pct)}</div>
+      <div>${usageBar("Memória uso", u.mem_usage_pct)}${usageBar("Memória reservada", u.mem_req_pct)}</div>
+    </div>
+    ${(d.taints || []).length ? `<p style="font-size:12px;color:var(--text-muted)">Taints: ${d.taints.map((t) => escapeHtml(`${t.key}${t.value ? "=" + t.value : ""}:${t.effect}`)).join(", ")}</p>` : ""}
+    <h4 style="margin:12px 0 6px">Por namespace</h4>
+    <table><thead><tr><th>Namespace</th><th>Pods</th><th>CPU em uso</th><th>Memória em uso</th></tr></thead>
+      <tbody>${d.namespaces.map((n) => `<tr><td>${escapeHtml(n.namespace)}</td><td>${n.pods}</td><td>${n.cpu_used_m}m</td><td>${n.mem_used_mi} Mi</td></tr>`).join("")}</tbody></table>
+    <h4 style="margin:12px 0 6px">Pods neste node (${d.pods.length}) — ordenados por memória em uso</h4>
+    <div style="max-height:360px;overflow:auto">
+    <table><thead><tr><th>Namespace / Pod</th><th>Workload</th><th>Status</th><th>Reinícios</th><th>CPU uso / req</th><th>Memória uso / req</th><th>QoS</th></tr></thead>
+      <tbody>${d.pods.map((p) => `
+        <tr>
+          <td><span style="color:var(--text-muted)">${escapeHtml(p.namespace)}/</span>${escapeHtml(p.pod)}</td>
+          <td>${escapeHtml(p.workload)}</td>
+          <td><span class="badge ${["Running"].includes(p.status) ? "badge-executed" : "badge-pending"}">${escapeHtml(p.status || "—")}</span></td>
+          <td>${p.restarts}</td>
+          <td>${fmtNum(p.cpu_used_m, "m")} / ${p.cpu_req_m ? p.cpu_req_m + "m" : '<span class="badge badge-rejected">sem request</span>'}</td>
+          <td>${fmtNum(p.mem_used_mi, " Mi")} / ${p.mem_req_mi ? p.mem_req_mi + " Mi" : '<span class="badge badge-rejected">sem request</span>'}</td>
+          <td>${escapeHtml(p.qos || "—")}</td>
+        </tr>`).join("")}</tbody></table>
+    </div>`;
+  document.getElementById("modal-body").innerHTML = body;
+  document.getElementById("modal-footer").innerHTML = `
+    <button class="btn btn-ghost" onclick="closeModal()">Fechar</button>
+    <button class="btn btn-primary" id="node-ask-ai">Analisar este node com o Assistente IA</button>`;
+  document.getElementById("node-ask-ai").addEventListener("click", () => {
+    closeModal();
+    switchTab("assistant");
+    document.getElementById("chat-input").value =
+      `Analise o node ${name}: quais pods mais consomem, quais estão sem requests e qual o risco de falta de memória ou CPU?`;
+  });
 }
 
 // ── Pendências do roadmap (interno) ─────────────────────────
