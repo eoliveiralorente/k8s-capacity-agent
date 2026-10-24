@@ -45,13 +45,36 @@ jobs:
           tags: capacity-agent:scan
           build-args: CAPACITY_AGENT_VERSION=${{ steps.version.outputs.version }}
 
-      - name: Scan de vulnerabilidades (Trivy)
+      # Política de segurança da release:
+      #  1) Sistema operacional e bibliotecas do produto: bloqueia CRITICAL e HIGH com correção disponível.
+      #  2) Imagem inteira (inclui o binário do kubectl, mantido pelo Kubernetes): bloqueia CRITICAL.
+      #  3) Relatório completo de HIGH do kubectl, só informativo (corrigido no próximo patch upstream).
+      - name: Trivy — produto (bloqueia CRITICAL/HIGH)
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: capacity-agent:scan
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          skip-files: /usr/local/bin/kubectl
           exit-code: "1"
+          format: table
+
+      - name: Trivy — imagem completa (bloqueia CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: capacity-agent:scan
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - name: Trivy — relatório do kubectl (informativo)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: capacity-agent:scan
+          severity: HIGH
+          ignore-unfixed: true
+          exit-code: "0"
           format: table
 
       - name: Log in to GitHub Container Registry
