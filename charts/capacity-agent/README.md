@@ -9,7 +9,7 @@ os dados num PVC. Nada sai do cluster.
 ```bash
 helm upgrade --install capacity-agent ./charts/capacity-agent \
   --namespace capacity-agent --create-namespace \
-  --set image.repository=ghcr.io/OWNER/k8s-capacity-agent \
+  --set image.repository=ghcr.io/eoliveiralorente/k8s-capacity-agent \
   --set clusterName="Produção"
 kubectl -n capacity-agent port-forward svc/capacity-agent 8080:80
 ```
@@ -39,13 +39,13 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/OWNER/k8s-capacity-agent
+    repoURL: https://github.com/eoliveiralorente/k8s-capacity-agent
     targetRevision: v0.1.0
     path: charts/capacity-agent
     helm:
       values: |
         image:
-          repository: ghcr.io/OWNER/k8s-capacity-agent
+          repository: ghcr.io/eoliveiralorente/k8s-capacity-agent
         clusterName: Produção
   destination:
     server: https://kubernetes.default.svc

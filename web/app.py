@@ -161,9 +161,27 @@ app = FastAPI(
 app.add_middleware(TenantAuthenticationMiddleware)
 
 
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "same-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    # 'unsafe-inline' cobre os handlers inline do painel; nenhum recurso externo é carregado.
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; "
+        "base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    ),
+}
+
+
 @app.middleware("http")
 async def disable_dashboard_asset_caching(request: Request, call_next):
     response = await call_next(request)
+    for header, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    if os.getenv("CAPACITY_AGENT_COOKIE_SECURE", "true").lower() == "true":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
     if request.url.path in {"/", "/static/app.js", "/static/styles.css"}:
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"

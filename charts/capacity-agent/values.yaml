@@ -2,7 +2,7 @@
 clusterName: "Este cluster"
 
 image:
-  repository: ghcr.io/OWNER/k8s-capacity-agent   # troque OWNER pelo seu usuário/organização do GitHub
+  repository: ghcr.io/eoliveiralorente/k8s-capacity-agent
   tag: ""                                         # vazio = appVersion do chart
   pullPolicy: IfNotPresent
 imagePullSecrets: []

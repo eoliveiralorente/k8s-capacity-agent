@@ -1,64 +1,64 @@
-# Kubernetes Capacity Agent
+# Capacity Agent
 
-Web dashboard and CLI for Kubernetes capacity analysis, scheduling insights,
-and operational recommendations. The application supports account-scoped
-cluster connections and encrypts uploaded kubeconfigs at rest.
-On the **Cluster** page, operators can inspect recent pod logs and, when
-available, logs from the previous container instance.
+**Capacidade, custo e risco do seu cluster Kubernetes em uma tela — com aprovação humana antes de qualquer mudança.**
 
-## Run with Docker Compose
+O Capacity Agent analisa nodes, pods e workloads de qualquer cluster Kubernetes (AWS, Azure,
+GCP, OCI, OpenStack/SaveInCloud ou on-premises) e entrega:
 
-Requirements: Docker Engine and the Docker Compose plugin.
+- **Nota de saúde do cluster** (0–100) com a explicação do que pesou.
+- **Prioridades**: pods em CrashLoop, Pending, nodes sob pressão, HPAs no limite.
+- **Economia em R$/mês**: rightsizing de requests, réplicas, HPA e pools superdimensionados,
+  com base em até 14 dias de histórico.
+- **Gate de aprovação**: nenhuma mudança é aplicada sem aprovação; simulação com `--dry-run=server`;
+  workloads gerenciados por GitOps viram recomendação manual.
+- **Mapa de nodes** clicável: o que roda em cada node, uso real × reservado.
+- **Diário de bordo** do time: pendências e notas vinculadas a nodes e recomendações.
+- **Assistente IA** opcional (Anthropic, OpenAI, Azure OpenAI ou Ollama interno), somente leitura.
+- **Alertas** por Slack, Teams, webhook e e-mail; **relatório executivo** para gestores.
+- Multiusuário com papéis (leitor, operador, admin), auditoria completa e licença offline.
 
-For production, set a persistent Fernet key in a local `.env` file (never
-commit it):
+## Instalação em 5 minutos (Helm, dentro do cluster)
 
-```bash
-printf 'CAPACITY_AGENT_ENCRYPTION_KEY=%s\n' \
-  "$(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" \
-  > .env
-```
-
-If the key is omitted, the application generates one at
-`/data/encryption.key`; the Compose volume keeps it across restarts. Keep the
-key and database together when moving the installation to another environment.
-Replacing or losing the key makes stored kubeconfigs unreadable. Then start:
+Requisitos: Kubernetes 1.27+, `helm` 3.8+, metrics-server (`kubectl top nodes` funcionando)
+e uma StorageClass padrão.
 
 ```bash
-docker compose up --build -d
-docker compose logs -f
+helm upgrade --install capacity-agent \
+  https://github.com/eoliveiralorente/k8s-capacity-agent/releases/download/v1.0.0/capacity-agent-1.0.0.tgz \
+  --namespace capacity-agent --create-namespace \
+  --set clusterName="Produção"
+
+kubectl -n capacity-agent rollout status deploy/capacity-agent
+kubectl -n capacity-agent port-forward svc/capacity-agent 8080:80
 ```
 
-By default, Compose binds the dashboard to `127.0.0.1:8080`. For remote access,
-put it behind HTTPS and configure secure cookies; do not expose the application
-directly to the public internet. Application state is stored in the Compose
-volume `capacity-agent-data`.
+Abra <http://localhost:8080>, clique em **Criar conta** (essa conta vira o administrador) e depois
+em **Nova Avaliação**. A instalação padrão é **100% somente leitura**.
 
-## Connect a Kubernetes cluster
+Próximos passos: [docs/cliente/INSTALACAO.md](docs/cliente/INSTALACAO.md) (Ingress/TLS, custos,
+alertas, IA, licença) · [Segurança](docs/cliente/SEGURANCA.md) ·
+[Atualização](docs/cliente/ATUALIZACAO.md) · [Solução de problemas](docs/cliente/SOLUCAO_DE_PROBLEMAS.md).
 
-Sign in to the dashboard, open **Cluster**, upload a kubeconfig, validate the
-connection, and select the active cluster. The application server must be able
-to reach the Kubernetes API endpoint in the kubeconfig. Avoid kubeconfigs that
-depend on local exec plugins or external certificate files.
+## Outras formas de instalar
 
-## Security and operational notes
+- **Painel central + coletor por cluster** (vários clusters, conexão só de saída):
+  [charts/capacity-collector](charts/capacity-collector/README.md).
+- **Docker Compose** (avaliação local): [docs/IMPLANTACAO_CLIENTE_TESTE.md](docs/IMPLANTACAO_CLIENTE_TESTE.md).
 
-- Use a unique, persistent encryption key per installation and store it in a
-  secret manager or protected deployment environment.
-- Back up the key and application database together, and test restoration.
-- The initial account model does not yet support inviting coworkers,
-  role-based access, email verification/recovery, or automated login-abuse
-  protections. Review these limits before production or commercial use.
-- Keep cluster-changing operations behind explicit approval and validate
-  recommendations with the cluster owner.
-- Never commit `.env`, kubeconfigs, private keys, application state, backups, or
-  customer-generated reports.
+## Demonstração
 
-See [docs/MULTI_TENANT.md](docs/MULTI_TENANT.md) for server configuration and
-cluster onboarding details.
+Ambiente com empresa e cluster fictícios, para conhecer o produto sem conectar um cluster:
+[docs/DEMO.md](docs/DEMO.md).
 
-For customer image releases and one-command updates, follow
-[docs/IMPLANTACAO_CLIENTE_TESTE.md](docs/IMPLANTACAO_CLIENTE_TESTE.md).
-Pushing a version tag such as `v1.2.3` runs the release workflow, tests the
-application, publishes a multi-architecture image to GHCR, and attaches the
-customer deployment files to the GitHub Release.
+## Segurança, em resumo
+
+- Imagem sem root, sistema de arquivos somente leitura, sem capabilities.
+- Kubeconfigs e segredos criptografados (Fernet); senhas com scrypt.
+- Cada release passa por testes automáticos e scan de vulnerabilidades (Trivy).
+- Dados ficam no seu ambiente: nenhuma telemetria é enviada ao fornecedor.
+
+## Licença
+
+Software comercial. A edição Community (1 cluster, 2 usuários) é gratuita; recursos como
+execução de mudanças, modo agente, alertas e Assistente IA exigem licença.
+Contato: [Otera Tech](https://otera-tech-instituti-6nk8.bolt.host/).

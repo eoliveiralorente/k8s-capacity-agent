@@ -16,8 +16,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 ARG TARGETARCH
+# kubectl fixado para builds reproduzíveis (compatível com clusters 1.30–1.32).
+ARG KUBECTL_VERSION=v1.31.4
 RUN set -eux; \
-    version="$(curl --fail --silent --show-error --location https://dl.k8s.io/release/stable.txt)"; \
+    version="${KUBECTL_VERSION}"; \
     case "${TARGETARCH:-amd64}" in \
       amd64|arm64) arch="${TARGETARCH:-amd64}" ;; \
       *) echo "Unsupported kubectl architecture: ${TARGETARCH}" >&2; exit 1 ;; \

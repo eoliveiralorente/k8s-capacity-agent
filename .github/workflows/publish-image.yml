@@ -1,4 +1,4 @@
-name: Publish container image
+name: Release
 
 on:
   push:
@@ -10,27 +10,49 @@ permissions:
   packages: write
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Versão a partir da tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install dependencies and run focused tests
+      - name: Testes
         run: |
           python -m pip install --requirement requirements.txt
-          python -m unittest test_accounts test_cluster_pods
+          TESTS=$(ls test_*.py | grep -v -E '^test_(capacity|health|tess)\.py$' | sed 's/\.py$//')
+          python -m unittest $TESTS
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Build local para o scan de segurança
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: capacity-agent:scan
+          build-args: CAPACITY_AGENT_VERSION=${{ steps.version.outputs.version }}
+
+      - name: Scan de vulnerabilidades (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: capacity-agent:scan
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -55,13 +77,25 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: CAPACITY_AGENT_VERSION=${{ steps.version.outputs.version }}
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
+
+      - name: Empacotar charts Helm
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          mkdir -p dist
+          for chart in charts/capacity-agent charts/capacity-collector; do
+            helm package "$chart" --version "${{ steps.version.outputs.version }}" \
+              --app-version "${{ steps.version.outputs.version }}" -d dist
+          done
 
       - name: Publish release with customer deployment files
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          body_path: CHANGELOG.md
           files: |
             compose.customer.yaml
             update-customer.sh
+            dist/*.tgz

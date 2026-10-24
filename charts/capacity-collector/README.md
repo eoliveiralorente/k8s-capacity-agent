@@ -14,7 +14,7 @@ exige kubeconfig.
 helm upgrade --install capacity-collector ./charts/capacity-collector \
   --namespace capacity-agent --create-namespace \
   --set panelUrl=https://painel.exemplo.com.br \
-  --set image.repository=ghcr.io/OWNER/k8s-capacity-agent \
+  --set image.repository=ghcr.io/eoliveiralorente/k8s-capacity-agent \
   --set ingestToken=cag_...
 ```
 
