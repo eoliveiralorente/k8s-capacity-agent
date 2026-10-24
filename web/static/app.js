@@ -446,7 +446,6 @@ function renderOverview() {
   renderExecutiveOverview();
   renderOverviewStatus();
   renderNodesUsage();
-  renderRoadmap();
   renderNavCounts();
   loadJournalSummary();
 }
@@ -1536,28 +1535,6 @@ async function showNodeDetail(name) {
     document.getElementById("chat-input").value =
       `Analise o node ${name}: quais pods mais consomem, quais estão sem requests e qual o risco de falta de memória ou CPU?`;
   });
-}
-
-// ── Pendências do roadmap (interno) ─────────────────────────
-
-let roadmapCache = null;
-async function renderRoadmap() {
-  const panel = document.getElementById("roadmap-panel");
-  if (!state.status?.show_roadmap) {
-    panel.classList.add("hidden");
-    return;
-  }
-  try {
-    if (!roadmapCache) roadmapCache = await (await fetch(`/static/roadmap.json?_=${Date.now()}`)).json();
-  } catch (e) {
-    return;
-  }
-  panel.classList.remove("hidden");
-  document.getElementById("roadmap-list").innerHTML = `
-    <ul>${roadmapCache.items.map((i) => `
-      <li><strong>${escapeHtml(i.titulo)}</strong> <span class="badge badge-pending">${escapeHtml(i.origem)}</span><br>
-      <span style="color:var(--text-muted);font-size:12px">${escapeHtml(i.detalhe)}</span></li>`).join("")}
-    </ul>`;
 }
 
 function formatBRL(value) {
