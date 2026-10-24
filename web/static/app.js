@@ -234,12 +234,12 @@ function switchTab(tab) {
 
   const titles = {
     overview: "Visão Geral",
-    cluster: "Cluster",
+    cluster: "Clusters e conexões",
     recommendations: "Recomendações",
-    capacity: "Capacity",
-    scheduling: "Scheduling",
+    capacity: "Nodes e capacidade",
+    scheduling: "Pods e scheduling",
     audit: "Auditoria",
-    users: "Usuários",
+    users: "Usuários e custos",
     assistant: "Assistente IA",
     support: "Suporte",
   };
@@ -488,6 +488,7 @@ function renderOverview() {
   `;
   renderConnectionSummary();
   loadLicense();
+  renderExecutiveOverview();
   renderNodesUsage();
   renderRoadmap();
 
@@ -629,7 +630,30 @@ function buildRecTable(items, compact = false) {
 
 function renderRecommendations() {
   const el = document.getElementById("recommendations-table");
-  el.innerHTML = buildRecTable(state.recommendations);
+  const items = state.recommendations;
+  if (!items.length) {
+    el.innerHTML = buildRecTable(items);
+  } else {
+    const groups = {};
+    items.forEach((r) => { (groups[r.type] = groups[r.type] || []).push(r); });
+    const impact = (list) => list.reduce((t, r) => t + Math.max(r.estimated_monthly || 0, 0), 0);
+    const worst = (list) => Math.min(...list.map((r) => SEV_RANK[r.severity] ?? 9));
+    const ordered = Object.entries(groups).sort(([, a], [, b]) => worst(a) - worst(b) || impact(b) - impact(a));
+    el.innerHTML = ordered.map(([type, list]) => {
+      list.sort((a, b) => (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9)
+        || (b.estimated_monthly || 0) - (a.estimated_monthly || 0));
+      const money = impact(list);
+      return `
+        <details class="rec-group" open>
+          <summary>
+            <span class="rec-group-title">${escapeHtml(REC_TYPE_LABELS[type] || type)}</span>
+            <span class="rec-group-count">${list.length}</span>
+            ${money > 0 ? `<span class="rec-group-money">${formatBRL(money)}/mês</span>` : ""}
+          </summary>
+          <div class="table-wrap">${buildRecTable(list)}</div>
+        </details>`;
+    }).join("");
+  }
 
   el.querySelectorAll("[data-action]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1332,6 +1356,18 @@ function usageBar(label, pct) {
     </div>`;
 }
 
+function nodeLayer(label, use, req) {
+  const hot = (use ?? 0) >= 85 || (req ?? 0) >= 95;
+  return `
+    <div class="nt-row">
+      <div class="nt-row-head"><span>${label}</span><span class="mono">${use === null || use === undefined ? "sem métrica" : formatPct(use)} <span class="nt-dim">/ ${formatPct(req)} res.</span></span></div>
+      <div class="nt-track">
+        <div class="nt-req" style="width:${Math.min(req || 0, 100)}%"></div>
+        <div class="nt-use ${hot ? "hot" : ""}" style="width:${Math.min(use || 0, 100)}%"></div>
+      </div>
+    </div>`;
+}
+
 function renderNodesUsage() {
   const el = document.getElementById("nodes-usage");
   const nodes = state.status?.latest_report?.nodes_usage || [];
@@ -1339,23 +1375,114 @@ function renderNodesUsage() {
     el.innerHTML = `<div class="empty-state"><p>Execute uma nova avaliação para ver o consumo por node</p></div>`;
     return;
   }
+  const sorted = [...nodes].sort((a, b) => (a.control_plane - b.control_plane)
+    || ((b.mem_usage_pct ?? 0) - (a.mem_usage_pct ?? 0)));
   el.innerHTML = `
-    <table>
-      <thead><tr><th>Node</th><th>Pool</th><th>Pods</th><th>CPU uso</th><th>CPU reservado</th><th>Memória uso</th><th>Memória reservada</th></tr></thead>
-      <tbody>${nodes.map((n) => `
-        <tr>
-          <td><button class="btn btn-ghost btn-sm" data-node="${escapeHtml(n.name)}" title="Ver o que roda neste node"><strong>${escapeHtml(n.name)}</strong> ›</button>${n.control_plane ? ' <span class="badge badge-manual">control plane</span>' : ""}${n.ready ? "" : ' <span class="badge badge-rejected">NotReady</span>'}</td>
-          <td>${escapeHtml(n.pool)}</td>
-          <td>${n.pod_count}${n.pods_capacity ? ` <span style="color:var(--text-muted);font-size:11px">/ ${n.pods_capacity}</span>` : ""}</td>
-          <td>${usageBar("uso", n.cpu_usage_pct)}</td>
-          <td>${usageBar("requests", n.cpu_req_pct)}</td>
-          <td>${usageBar("uso", n.mem_usage_pct)}</td>
-          <td>${usageBar("requests", n.mem_req_pct)}</td>
-        </tr>`).join("")}
-      </tbody>
-    </table>
-    <p style="color:var(--text-muted);font-size:12px;margin-top:8px">Clique em um node para ver os pods e serviços dele. Percentuais sobre o allocatable de cada node. "Uso" = consumo real agora (metrics-server); "reservado" = soma dos requests dos pods no node.</p>`;
+    <div class="node-grid">${sorted.map((n) => `
+      <button class="node-tile ${n.ready ? "" : "down"}" data-node="${escapeHtml(n.name)}" title="Ver pods e serviços deste node">
+        <div class="nt-head">
+          <span class="nt-dot ${n.ready ? "ok" : "bad"}"></span>
+          <strong class="nt-name">${escapeHtml(n.name)}</strong>
+          <span class="nt-arrow">›</span>
+        </div>
+        <div class="nt-meta">${escapeHtml(n.pool)}${n.control_plane ? " · control plane" : ""} · ${n.pod_count}${n.pods_capacity ? "/" + n.pods_capacity : ""} pods${n.ready ? "" : " · NotReady"}</div>
+        ${nodeLayer("CPU", n.cpu_usage_pct, n.cpu_req_pct)}
+        ${nodeLayer("Memória", n.mem_usage_pct, n.mem_req_pct)}
+      </button>`).join("")}
+    </div>
+    <p class="ov-foot">Clique em um node para ver os pods e serviços dele. Percentuais sobre o allocatable: "em uso" vem do metrics-server; "reservado" é a soma dos requests dos pods.</p>`;
 }
+
+const REC_TYPE_LABELS = {
+  RIGHTSIZE_REQUESTS: "Ajustar requests (sobra)",
+  INCREASE_REQUESTS: "Aumentar requests (pressão)",
+  MISSING_REQUESTS: "Definir requests ausentes",
+  INCREASE_REPLICAS: "Aumentar réplicas",
+  REDUCE_REPLICAS: "Reduzir réplicas",
+  CREATE_HPA: "Criar HPA",
+  HPA_AT_MAX: "HPA no limite",
+  HPA_WITHOUT_REQUESTS: "HPA sem requests",
+  UNDERUTILIZED: "Pool subutilizado",
+};
+const SEV_RANK = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+
+function renderExecutiveOverview() {
+  const ov = state.status?.latest_report?.overview;
+  const hero = document.getElementById("ov-hero");
+  if (!ov) {
+    hero.innerHTML = `<div class="ov-hero-empty"><h2>Sem avaliação ainda</h2><p>Clique em <strong>Nova avaliação</strong> para gerar a nota de saúde do cluster.</p></div>`;
+    ["ov-kpis", "ov-risks", "ov-savings"].forEach((id) => { document.getElementById(id).innerHTML = ""; });
+    return;
+  }
+  const tone = ov.score >= 85 ? "ok" : ov.score >= 60 ? "warn" : "bad";
+  const circ = 2 * Math.PI * 34;
+  const created = state.status?.latest_report?.created_at;
+  hero.innerHTML = `
+    <div class="ov-ring ${tone}" title="${escapeHtml((ov.factors || []).map((f) => `${f.points} ${f.reason}`).join("\n") || "Sem descontos")}">
+      <svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="34" class="ring-bg"/><circle cx="40" cy="40" r="34" class="ring-fg"
+        stroke-dasharray="${circ}" stroke-dashoffset="${circ * (1 - ov.score / 100)}"/></svg>
+      <div class="ov-ring-label"><strong>${ov.score}</strong><span>/100</span></div>
+    </div>
+    <div class="ov-hero-text">
+      <span class="chip chip-${tone}">${escapeHtml(ov.status)}</span>
+      <h2>${escapeHtml(ov.headline)}</h2>
+      <p>${escapeHtml(ov.explanation)}</p>
+      ${created ? `<span class="ov-when">Avaliação de ${formatDate(created)}</span>` : ""}
+    </div>`;
+
+  const k = ov.kpis || {};
+  const kpi = (label, value, sub, cls = "") => `
+    <div class="kpi"><span class="kpi-label">${label}</span><strong class="kpi-value ${cls}">${value}</strong><span class="kpi-sub">${sub}</span></div>`;
+  document.getElementById("ov-kpis").innerHTML = [
+    kpi("Riscos ativos", k.risks ?? 0, k.risks_high ? `${k.risks_high} crítico(s)` : "nenhum crítico", k.risks_high ? "bad" : k.risks ? "warn" : "ok"),
+    kpi("Economia potencial", k.savings_monthly === null || k.savings_monthly === undefined ? "—" : formatBRL(k.savings_monthly),
+      k.savings_monthly === null || k.savings_monthly === undefined ? "configure custos em Usuários e custos" : `por mês · ${k.savings_count} recomendação(ões)`, "ok"),
+    kpi("Eficiência de CPU", k.cpu_efficiency_pct === null || k.cpu_efficiency_pct === undefined ? "—" : `${k.cpu_efficiency_pct}%`, "do reservado está em uso",
+      k.cpu_efficiency_pct !== null && k.cpu_efficiency_pct < 30 ? "warn" : ""),
+    kpi("Disponibilidade", k.pods_ok_pct === null || k.pods_ok_pct === undefined ? "—" : `${k.pods_ok_pct}%`, `pods saudáveis · ${k.nodes_ready}/${k.nodes_total} nodes Ready`,
+      (k.pods_ok_pct ?? 100) < 95 ? "warn" : "ok"),
+  ].join("");
+
+  const risks = ov.top_risks || [];
+  document.getElementById("ov-risks").innerHTML = risks.length ? risks.map((r, i) => {
+    let btn = "";
+    if (r.key.startsWith("node-")) btn = `<button class="btn btn-ghost btn-sm" data-risk-node="${escapeHtml(r.key.split(":").slice(1).join(":"))}">Ver node</button>`;
+    else if (r.key.startsWith("pod:")) btn = `<button class="btn btn-ghost btn-sm" data-risk-ai="${i}">Diagnosticar com IA</button>`;
+    else btn = `<button class="btn btn-ghost btn-sm" data-risk-goto="scheduling">Ver scheduling</button>`;
+    return `
+      <div class="ov-item">
+        <span class="chip chip-${r.severity === "HIGH" ? "bad" : "warn"}">${r.severity === "HIGH" ? "CRÍTICO" : "ATENÇÃO"}</span>
+        <div class="ov-item-text"><strong>${escapeHtml(r.title)}</strong><span>${escapeHtml(r.detail)}</span></div>
+        ${btn}
+      </div>`;
+  }).join("") : `<div class="ov-empty">✓ Nenhum risco ativo na última avaliação.</div>`;
+
+  const savings = ov.top_savings || [];
+  document.getElementById("ov-savings").innerHTML = savings.length ? savings.map((s) => `
+    <div class="ov-item">
+      <strong class="ov-money">${formatBRL(s.monthly)}<small>/mês</small></strong>
+      <div class="ov-item-text"><strong>${escapeHtml(REC_TYPE_LABELS[s.type] || s.type)}</strong><span>${escapeHtml(s.target || "")}</span></div>
+      <button class="btn btn-ghost btn-sm" data-goto-rec="${escapeHtml(s.id || "")}">Revisar</button>
+    </div>`).join("") : `<div class="ov-empty">${k.savings_monthly === null || k.savings_monthly === undefined
+      ? "Configure o custo por vCPU e GB em Usuários e custos para estimar economias."
+      : "Nenhuma economia relevante identificada agora."}</div>`;
+}
+
+document.getElementById("tab-overview").addEventListener("click", (event) => {
+  const nodeBtn = event.target.closest("[data-risk-node]");
+  if (nodeBtn) return showNodeDetail(nodeBtn.dataset.riskNode);
+  const goto = event.target.closest("[data-risk-goto]");
+  if (goto) return switchTab(goto.dataset.riskGoto);
+  const rec = event.target.closest("[data-goto-rec]");
+  if (rec) return switchTab("recommendations");
+  const ai = event.target.closest("[data-risk-ai]");
+  if (ai) {
+    const r = (state.status?.latest_report?.overview?.top_risks || [])[Number(ai.dataset.riskAi)];
+    switchTab("assistant");
+    const input = document.getElementById("chat-input");
+    if (input && r) { input.value = `Diagnostique: ${r.title}. ${r.detail}`; input.focus(); }
+  }
+});
 
 document.getElementById("nodes-usage").addEventListener("click", (event) => {
   const btn = event.target.closest("[data-node]");

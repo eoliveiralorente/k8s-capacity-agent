@@ -312,7 +312,14 @@ def summarize_report_for_api(report):
 
     stability = ensure_stability(report)
 
+    from analyzers.score import build_overview
+    try:
+        overview = build_overview(report)
+    except Exception:  # resumo é cosmético; nunca derruba o status
+        overview = None
+
     return {
+        "overview": overview,
         "evaluation_id": report.get("evaluation_id"),
         "cluster": report.get("cluster"),
         "created_at": report.get("created_at"),

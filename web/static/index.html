@@ -66,16 +66,19 @@
       </div>
 
       <nav class="nav">
+        <p class="nav-section">Operação</p>
         <button class="nav-item active" data-tab="overview">Visão Geral</button>
-        <button class="nav-item" data-tab="cluster">Cluster</button>
         <button class="nav-item" data-tab="recommendations">Recomendações</button>
-        <button class="nav-item" data-tab="capacity">Capacity</button>
-        <button class="nav-item" data-tab="scheduling">Scheduling</button>
+        <button class="nav-item" data-tab="capacity">Nodes e capacidade</button>
+        <button class="nav-item" data-tab="scheduling">Pods e scheduling</button>
         <button class="nav-item" data-tab="assistant">Assistente IA</button>
+        <p class="nav-section">Governança</p>
         <button class="nav-item" data-tab="audit">Auditoria</button>
+        <a class="nav-item nav-link" href="/relatorio" target="_blank">Relatório executivo ↗</a>
+        <p class="nav-section">Configurações</p>
+        <button class="nav-item" data-tab="cluster">Clusters e conexões</button>
+        <button class="nav-item hidden" data-tab="users" id="nav-users">Usuários e custos</button>
         <button class="nav-item hidden" data-tab="support" id="nav-support">Suporte</button>
-        <button class="nav-item hidden" data-tab="users" id="nav-users">Usuários</button>
-        <a class="nav-item nav-link" href="/relatorio" target="_blank">Relatório Gerencial ↗</a>
       </nav>
 
       <div class="sidebar-footer">
@@ -114,42 +117,53 @@
       <!-- OVERVIEW -->
       <section class="tab-panel active" id="tab-overview">
         <div class="panel hidden" id="license-banner"><div class="panel-body" id="license-banner-text"></div></div>
-        <div class="cards" id="overview-cards"></div>
-        <div class="panel overview-connection" id="overview-connection"></div>
+
+        <div class="ov-hero" id="ov-hero"></div>
+        <div class="ov-kpis" id="ov-kpis"></div>
+
+        <div class="ov-cols">
+          <div class="panel ov-panel">
+            <div class="panel-header"><h3>Prioridades agora</h3><button class="btn btn-ghost btn-sm" data-goto="recommendations">Ver recomendações</button></div>
+            <div class="panel-body" id="ov-risks"></div>
+          </div>
+          <div class="panel ov-panel">
+            <div class="panel-header"><h3>Maiores economias</h3><button class="btn btn-ghost btn-sm" data-goto="recommendations">Ver todas</button></div>
+            <div class="panel-body" id="ov-savings"></div>
+          </div>
+        </div>
+
+        <div class="panel ov-panel">
+          <div class="panel-header">
+            <h3>Capacidade por node</h3>
+            <div class="ov-legend"><span><i class="lg-use"></i>Em uso</span><span><i class="lg-req"></i>Reservado (requests)</span><span><i class="lg-warn"></i>Acima de 85%</span></div>
+          </div>
+          <div class="panel-body" id="nodes-usage"></div>
+        </div>
 
         <div class="panel hidden" id="roadmap-panel">
           <div class="panel-header"><h3>Pendências do roadmap (interno)</h3></div>
           <div class="panel-body" id="roadmap-list"></div>
         </div>
 
-        <div class="panel">
-          <div class="panel-header"><h3>Consumo por node</h3></div>
-          <div class="panel-body" id="nodes-usage"></div>
-        </div>
-
-        <div class="grid-2">
-          <div class="panel">
-            <div class="panel-header">
-              <h3>Health Checks</h3>
+        <details class="ov-details">
+          <summary>Detalhes técnicos</summary>
+          <div class="panel overview-connection" id="overview-connection"></div>
+          <div class="cards" id="overview-cards"></div>
+          <div class="grid-2">
+            <div class="panel">
+              <div class="panel-header"><h3>Health Checks</h3></div>
+              <div class="panel-body" id="health-checks"></div>
             </div>
-            <div class="panel-body" id="health-checks"></div>
-          </div>
-
-          <div class="panel">
-            <div class="panel-header">
-              <h3>Gate de Decisão</h3>
+            <div class="panel">
+              <div class="panel-header"><h3>Gate de Decisão</h3></div>
+              <div class="panel-body" id="decision-panel"></div>
             </div>
-            <div class="panel-body" id="decision-panel"></div>
           </div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-header">
-            <h3>Recomendações Pendentes</h3>
-            <button class="btn btn-ghost btn-sm" data-goto="recommendations">Ver todas</button>
+          <div class="panel">
+            <div class="panel-header"><h3>Recomendações Pendentes</h3></div>
+            <div class="panel-body" id="pending-preview"></div>
           </div>
-          <div class="panel-body" id="pending-preview"></div>
-        </div>
+        </details>
       </section>
 
       <section class="tab-panel" id="tab-cluster">
@@ -220,9 +234,7 @@
           <button class="filter-btn" data-status="rejected">Rejeitadas</button>
           <button class="filter-btn" data-status="executed">Executadas</button>
         </div>
-        <div class="panel">
-          <div class="panel-body table-wrap" id="recommendations-table"></div>
-        </div>
+        <div id="recommendations-table"></div>
       </section>
 
       <!-- CAPACITY -->
