@@ -201,6 +201,16 @@ CREATE TABLE IF NOT EXISTS cluster_snapshots (
     data BLOB NOT NULL,
     PRIMARY KEY (tenant_id, cluster_id)
 );
+CREATE TABLE IF NOT EXISTS alert_state (
+    tenant_id TEXT NOT NULL,
+    cluster_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    title TEXT NOT NULL,
+    first_seen TEXT NOT NULL,
+    last_sent TEXT,
+    PRIMARY KEY (tenant_id, cluster_id, key)
+);
 CREATE INDEX IF NOT EXISTS audit_tenant_idx ON audit_log(tenant_id, timestamp);
 """
 
@@ -530,3 +540,53 @@ def load_cluster_snapshot():
     snapshot = json.loads(gzip.decompress(row["data"]).decode("utf-8"))
     snapshot["_received_at"] = row["received_at"]
     return snapshot
+
+
+# ── Estado dos alertas (deduplicação) ─────────────────────────
+
+def reconcile_alert_state(current_alerts, remind_hours=6, now=None):
+    """Compara alertas atuais com os já conhecidos.
+
+    Retorna lista de itens a notificar com state new|reminder|resolved e grava o estado.
+    """
+    from datetime import timedelta
+
+    tenant_id, cluster_id = _scope()
+    now = now or datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    to_send = []
+    with _transaction(write=True) as connection:
+        known = {row["key"]: dict(row) for row in connection.execute(
+            "SELECT * FROM alert_state WHERE tenant_id = ? AND cluster_id = ?", (tenant_id, cluster_id))}
+        current_keys = set()
+        for alert in current_alerts:
+            current_keys.add(alert["key"])
+            old = known.get(alert["key"])
+            if not old:
+                to_send.append({**alert, "state": "new"})
+                connection.execute(
+                    "INSERT INTO alert_state(tenant_id, cluster_id, key, severity, title, first_seen, last_sent) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (tenant_id, cluster_id, alert["key"], alert["severity"], alert["title"], now_iso, now_iso))
+            elif not old["last_sent"] or datetime.fromisoformat(old["last_sent"]) <= now - timedelta(hours=remind_hours):
+                to_send.append({**alert, "state": "reminder", "since": old["first_seen"]})
+                connection.execute(
+                    "UPDATE alert_state SET last_sent = ?, title = ?, severity = ? "
+                    "WHERE tenant_id = ? AND cluster_id = ? AND key = ?",
+                    (now_iso, alert["title"], alert["severity"], tenant_id, cluster_id, alert["key"]))
+        for key, old in known.items():
+            if key not in current_keys:
+                to_send.append({"key": key, "severity": old["severity"], "title": old["title"],
+                                "detail": "", "state": "resolved", "since": old["first_seen"]})
+                connection.execute("DELETE FROM alert_state WHERE tenant_id = ? AND cluster_id = ? AND key = ?",
+                                   (tenant_id, cluster_id, key))
+    return to_send
+
+
+def list_active_alerts():
+    tenant_id, cluster_id = _scope()
+    with _transaction() as connection:
+        rows = connection.execute(
+            "SELECT key, severity, title, first_seen, last_sent FROM alert_state "
+            "WHERE tenant_id = ? AND cluster_id = ? ORDER BY first_seen", (tenant_id, cluster_id)).fetchall()
+    return [dict(row) for row in rows]

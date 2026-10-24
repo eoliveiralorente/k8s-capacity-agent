@@ -51,6 +51,33 @@ spec:
               value: {{ .Values.secureCookies | quote }}
             - name: CAPACITY_AGENT_SAMPLE_MINUTES
               value: {{ .Values.sampleMinutes | quote }}
+            - name: CAPACITY_AGENT_EVALUATE_MINUTES
+              value: {{ .Values.evaluateMinutes | quote }}
+            {{- if .Values.publicUrl }}
+            - name: CAPACITY_AGENT_PUBLIC_URL
+              value: {{ .Values.publicUrl | quote }}
+            {{- end }}
+            {{- if .Values.smtp.host }}
+            - name: CAPACITY_AGENT_SMTP_HOST
+              value: {{ .Values.smtp.host | quote }}
+            - name: CAPACITY_AGENT_SMTP_PORT
+              value: {{ .Values.smtp.port | quote }}
+            - name: CAPACITY_AGENT_SMTP_USER
+              value: {{ .Values.smtp.user | quote }}
+            - name: CAPACITY_AGENT_SMTP_FROM
+              value: {{ .Values.smtp.from | quote }}
+            - name: CAPACITY_AGENT_SMTP_STARTTLS
+              value: {{ .Values.smtp.starttls | quote }}
+            {{- if .Values.smtp.passwordSecret }}
+            - name: CAPACITY_AGENT_SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.smtp.passwordSecret }}
+                  key: password
+            {{- end }}
+            {{- end }}
+            - name: CAPACITY_AGENT_AI_TIMEOUT
+              value: {{ .Values.aiTimeoutSeconds | quote }}
             - name: CAPACITY_AGENT_PROTECTED_NAMESPACES
               value: {{ .Values.protectedNamespaces | quote }}
             - name: CAPACITY_AGENT_ENCRYPTION_KEY

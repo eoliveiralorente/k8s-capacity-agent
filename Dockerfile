@@ -43,6 +43,7 @@ COPY reporters/ ./reporters/
 COPY web/ ./web/
 COPY licensing/ ./licensing/
 COPY assistant/ ./assistant/
+COPY alerts/ ./alerts/
 
 RUN chmod -R a+rX /app \
     && mkdir -p /data \

@@ -89,6 +89,24 @@ def initialize_database():
                 enabled INTEGER NOT NULL DEFAULT 1,
                 updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS alert_settings (
+                tenant_id TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                min_severity TEXT NOT NULL DEFAULT 'MEDIUM',
+                slack_url_c BLOB,
+                teams_url_c BLOB,
+                webhook_url_c BLOB,
+                emails TEXT,
+                include_ai INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS cost_settings (
+                tenant_id TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+                currency TEXT NOT NULL DEFAULT 'BRL',
+                cpu_month REAL NOT NULL DEFAULT 0,
+                gb_month REAL NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS assistant_usage (
                 tenant_id TEXT NOT NULL,
                 day TEXT NOT NULL,
@@ -678,3 +696,76 @@ def increment_assistant_usage(tenant_id):
         return connection.execute(
             "SELECT count FROM assistant_usage WHERE tenant_id = ? AND day = ?", (tenant_id, day)
         ).fetchone()[0]
+
+
+
+# ── Custos (estimativa de economia) ───────────────────────────
+
+def get_cost_settings(tenant_id):
+    from analyzers.costs import default_settings
+
+    if not tenant_id:
+        return default_settings()
+    initialize_database()
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT currency, cpu_month, gb_month, updated_at FROM cost_settings WHERE tenant_id = ?", (tenant_id,)
+        ).fetchone()
+    return dict(row) if row else default_settings()
+
+
+def save_cost_settings(tenant_id, cpu_month, gb_month, currency="BRL"):
+    initialize_database()
+    with _connect() as connection:
+        connection.execute(
+            "INSERT OR REPLACE INTO cost_settings(tenant_id, currency, cpu_month, gb_month, updated_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (tenant_id, currency, float(cpu_month), float(gb_month), datetime.now(timezone.utc).isoformat()),
+        )
+
+
+
+# ── Alertas (canais por empresa; URLs cifradas) ───────────────
+
+_ALERT_URLS = ("slack_url", "teams_url", "webhook_url")
+
+
+def get_alert_settings(tenant_id, include_secrets=False):
+    initialize_database()
+    with _connect() as connection:
+        row = connection.execute("SELECT * FROM alert_settings WHERE tenant_id = ?", (tenant_id,)).fetchone()
+    if not row:
+        return None
+    fernet, invalid = _fernet()
+    config = {"enabled": bool(row["enabled"]), "min_severity": row["min_severity"],
+              "emails": row["emails"] or "", "include_ai": bool(row["include_ai"]), "updated_at": row["updated_at"]}
+    for name in _ALERT_URLS:
+        blob = row[f"{name}_c"]
+        config[f"has_{name}"] = bool(blob)
+        if include_secrets and blob:
+            try:
+                config[name] = fernet.decrypt(blob).decode("utf-8")
+            except invalid:
+                config[name] = None
+    return config
+
+
+def save_alert_settings(tenant_id, enabled=True, min_severity="MEDIUM", emails="", include_ai=False, **urls):
+    """urls: slack_url/teams_url/webhook_url — None mantém, "" remove, valor substitui."""
+    initialize_database()
+    fernet, _ = _fernet()
+    with _connect() as connection:
+        current = connection.execute("SELECT * FROM alert_settings WHERE tenant_id = ?", (tenant_id,)).fetchone()
+        blobs = {}
+        for name in _ALERT_URLS:
+            value = urls.get(name)
+            if value is None:
+                blobs[name] = current[f"{name}_c"] if current else None
+            else:
+                blobs[name] = fernet.encrypt(value.encode("utf-8")) if value else None
+        connection.execute(
+            "INSERT OR REPLACE INTO alert_settings(tenant_id, enabled, min_severity, slack_url_c, teams_url_c, "
+            "webhook_url_c, emails, include_ai, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (tenant_id, int(bool(enabled)), min_severity, blobs["slack_url"], blobs["teams_url"],
+             blobs["webhook_url"], emails or None, int(bool(include_ai)), datetime.now(timezone.utc).isoformat()),
+        )

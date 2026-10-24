@@ -158,6 +158,11 @@ def evaluate_cluster(data=None):
             capacity_recommendations.append(rec)
 
     workload_recs = workload_recommendations(pods, data.get("container_metrics") or {})
+    from alerts.rules import unhealthy_pods
+    try:
+        unhealthy = unhealthy_pods(pods)
+    except Exception:
+        unhealthy = []
 
     scheduling_findings = analyze_scheduling(pods, events)
 
@@ -240,6 +245,7 @@ def evaluate_cluster(data=None):
         },
         "recommendations": all_recommendations,
         "nodes_usage": analyze_nodes(nodes, pods, node_metrics),
+        "unhealthy_pods": unhealthy[:100],
         "decision": decision,
         "node_pools": node_pools,
     }
@@ -310,6 +316,7 @@ def summarize_report_for_api(report):
         },
         "recommendations": report.get("recommendations", []),
         "nodes_usage": report.get("nodes_usage", []),
+        "unhealthy_pods": report.get("unhealthy_pods", []),
         "stability": stability,
     }
 
@@ -416,6 +423,17 @@ def run_evaluation(source="cli", actor=None):
     )
     result["summary"]["recommendations_count"] = len(result["recommendations"])
 
+    carry_over_decisions(load_recommendations().get("items", []), result["recommendations"])
+    from accounts.store import get_cost_settings
+    from analyzers.costs import apply_costs
+    from tenant_context import current_tenant_id
+
+    cost_settings = get_cost_settings(current_tenant_id.get())
+    result["summary"]["estimated_savings_monthly"] = apply_costs(
+        result["recommendations"], result["capacity"], cost_settings
+    )
+    result["summary"]["cost_settings"] = cost_settings
+
     report = {
         "evaluation_id": evaluation_id,
         "cluster": cluster,
@@ -439,6 +457,9 @@ def run_evaluation(source="cli", actor=None):
         "by": actor,
         "decisions_kept": carried,
     })
+
+    from alerts.dispatch import process_alerts_async
+    process_alerts_async(report)
 
     return report
 

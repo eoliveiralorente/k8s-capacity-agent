@@ -82,7 +82,9 @@ def collect_workloads(pods, container_metrics):
                 "mem_req_b": parse_memory(requests.get("memory")),
                 "cpu_lim_m": parse_cpu(limits.get("cpu")),
                 "mem_lim_b": parse_memory(limits.get("memory")),
+                "replicas": 0,
             })
+            specs[key]["replicas"] += 1
             usage = container_metrics.get((namespace, pod_name, cname))
             if usage:
                 current = samples.setdefault(key, {"cpu_m": 0, "mem_b": 0})
@@ -195,6 +197,9 @@ def rightsizing_recommendations(specs, history):
             "current": {"cpu": fmt_cpu(cur_cpu) if cur_cpu else None,
                         "memory": fmt_mem(cur_mem) if cur_mem else None},
             "target": {"cpu": fmt_cpu(new_cpu), "memory": fmt_mem(new_mem)},
+            "replicas": spec.get("replicas", 1),
+            "delta": {"cpu_m": (cur_cpu - new_cpu) * spec.get("replicas", 1),
+                      "mem_b": (cur_mem - new_mem) * spec.get("replicas", 1)},
         }
         if blockers:
             operation = {"kind": "manual_review", "executable": False,

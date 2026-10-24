@@ -13,6 +13,8 @@ from tenant_context import current_cluster_id, current_cluster_name, current_ten
 log = logging.getLogger("capacity-agent.sampler")
 
 SAMPLE_MINUTES = int(os.getenv("CAPACITY_AGENT_SAMPLE_MINUTES", "15") or 0)
+# Avaliação completa agendada (gera recomendações e alertas); 0 desativa.
+EVALUATE_MINUTES = int(os.getenv("CAPACITY_AGENT_EVALUATE_MINUTES", "60") or 0)
 
 _stop = threading.Event()
 _thread = None
@@ -62,9 +64,41 @@ def sample_all():
             log.warning("Falha ao amostrar cluster %s: %s", cluster.get("name"), exc)
 
 
+def evaluate_all():
+    """Avaliação agendada de todos os clusters (inclui amostra, recomendações e alertas)."""
+    from accounts.store import list_all_clusters
+    from engine.evaluation import run_evaluation
+    from tenant_context import current_cluster_mode, current_cluster_provider
+
+    for cluster in list_all_clusters():
+        if _stop.is_set():
+            return
+        tokens = [
+            (current_tenant_id, current_tenant_id.set(cluster["tenant_id"])),
+            (current_cluster_id, current_cluster_id.set(cluster["id"])),
+            (current_cluster_name, current_cluster_name.set(cluster["name"])),
+            (current_cluster_mode, current_cluster_mode.set(cluster.get("mode") or "kubeconfig")),
+            (current_cluster_provider, current_cluster_provider.set("kubernetes")),
+        ]
+        try:
+            run_evaluation(source="agendada")
+        except Exception as exc:
+            log.warning("Falha na avaliação agendada de %s: %s", cluster.get("name"), exc)
+        finally:
+            for var, token in reversed(tokens):
+                var.reset(token)
+
+
 def _loop():
+    import time
+
+    last_eval = time.monotonic()
     while not _stop.wait(SAMPLE_MINUTES * 60):
-        sample_all()
+        if EVALUATE_MINUTES and time.monotonic() - last_eval >= EVALUATE_MINUTES * 60:
+            last_eval = time.monotonic()
+            evaluate_all()
+        else:
+            sample_all()
 
 
 def start():

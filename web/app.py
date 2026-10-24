@@ -24,7 +24,11 @@ from accounts.store import (
     set_user_role,
     count_tenants,
     create_agent_cluster,
+    get_alert_settings,
     get_assistant_config,
+    save_alert_settings,
+    get_cost_settings,
+    save_cost_settings,
     increment_assistant_usage,
     save_assistant_config,
     ensure_incluster_cluster,
@@ -272,6 +276,81 @@ def api_assistant_chat(body: ChatRequest):
     append_audit("assistant_query", {"question": body.messages[-1].content[:200],
                                      "tools": tools_used, "by": _actor()})
     return {"answer": answer, "tools_used": tools_used}
+
+
+class AlertSettingsRequest(BaseModel):
+    enabled: bool = True
+    min_severity: str = Field(default="MEDIUM", pattern="^(LOW|MEDIUM|HIGH)$")
+    slack_url: str | None = Field(default=None, max_length=500)
+    teams_url: str | None = Field(default=None, max_length=1000)
+    webhook_url: str | None = Field(default=None, max_length=500)
+    emails: str = Field(default="", max_length=1000)
+    include_ai: bool = False
+
+
+@app.get("/api/alerts/config")
+def api_alerts_config():
+    from alerts.notify import smtp_configured
+
+    return {"config": get_alert_settings(current_user.get()["tenant_id"]),
+            "licensed": has_feature("alerts"), "smtp_configured": smtp_configured()}
+
+
+@app.put("/api/alerts/config")
+def api_save_alerts_config(body: AlertSettingsRequest):
+    user = current_user.get()
+    for name in ("slack_url", "teams_url"):
+        value = getattr(body, name)
+        if value and not value.startswith("https://"):
+            raise HTTPException(status_code=422, detail=f"{name} deve começar com https://")
+    if body.webhook_url and not re.fullmatch(r"https?://\S+", body.webhook_url):
+        raise HTTPException(status_code=422, detail="webhook_url inválida")
+    for email in [e.strip() for e in body.emails.split(",") if e.strip()]:
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+            raise HTTPException(status_code=422, detail=f"E-mail inválido: {email}")
+    save_alert_settings(user["tenant_id"], body.enabled, body.min_severity, body.emails, body.include_ai,
+                        slack_url=body.slack_url, teams_url=body.teams_url, webhook_url=body.webhook_url)
+    append_audit("alert_settings", {"by": _actor(), "min_severity": body.min_severity})
+    return {"success": True, "config": get_alert_settings(user["tenant_id"])}
+
+
+@app.post("/api/alerts/test")
+def api_alerts_test():
+    from alerts.notify import deliver
+
+    _license_guard(require_feature, "alerts")
+    config = get_alert_settings(current_user.get()["tenant_id"], include_secrets=True) or {}
+    items = [{"key": "teste", "severity": "MEDIUM", "state": "new", "title": "Alerta de teste",
+              "detail": f"Enviado por {_actor()} para validar os canais."}]
+    results = deliver(config, current_cluster_name.get() or "cluster", items, os.getenv("CAPACITY_AGENT_PUBLIC_URL"))
+    if not results:
+        raise HTTPException(status_code=409, detail="Nenhum canal configurado")
+    return {"results": results}
+
+
+@app.get("/api/alerts/active")
+def api_alerts_active():
+    from approval.store import list_active_alerts
+
+    return {"alerts": list_active_alerts()}
+
+
+class CostSettingsRequest(BaseModel):
+    cpu_month: float = Field(ge=0, le=100000)
+    gb_month: float = Field(ge=0, le=100000)
+
+
+@app.get("/api/costs")
+def api_costs():
+    return get_cost_settings(current_user.get()["tenant_id"])
+
+
+@app.put("/api/costs")
+def api_save_costs(body: CostSettingsRequest):
+    user = current_user.get()
+    save_cost_settings(user["tenant_id"], body.cpu_month, body.gb_month)
+    append_audit("cost_settings", {"cpu_month": body.cpu_month, "gb_month": body.gb_month, "by": _actor()})
+    return get_cost_settings(user["tenant_id"])
 
 
 class LicenseUpload(BaseModel):

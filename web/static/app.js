@@ -241,7 +241,11 @@ function switchTab(tab) {
     assistant: "Assistente IA",
   };
   document.getElementById("page-title").textContent = titles[tab] || tab;
-  if (tab === "users" && can("admin")) loadUsers().catch((e) => toast(e.message, "error"));
+  if (tab === "users" && can("admin")) {
+    loadUsers().catch((e) => toast(e.message, "error"));
+    loadCosts();
+    loadAlertsConfig();
+  }
   if (tab === "assistant") loadAssistantConfig().catch(() => {});
   if (tab === "cluster" && state.selectedClusterId) {
     loadClusterPods().catch((error) => {
@@ -463,6 +467,13 @@ function renderOverview() {
       <div class="card-label">Recomendações</div>
       <div class="card-value">${summary.recommendations_count ?? 0}</div>
       <div class="card-sub">última avaliação</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Economia potencial</div>
+      <div class="card-value ok">${summary.cost_settings && (summary.cost_settings.cpu_month || summary.cost_settings.gb_month)
+        ? formatBRL(summary.estimated_savings_monthly || 0) : "—"}</div>
+      <div class="card-sub">${summary.cost_settings && (summary.cost_settings.cpu_month || summary.cost_settings.gb_month)
+        ? "por mês, recomendações abertas" : "configure custos em Usuários"}</div>
     </div>
   `;
   renderConnectionSummary();
@@ -1357,6 +1368,94 @@ async function renderRoadmap() {
       <span style="color:var(--text-muted);font-size:12px">${escapeHtml(i.detalhe)}</span></li>`).join("")}
     </ul>`;
 }
+
+function formatBRL(value) {
+  return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+async function loadAlertsConfig() {
+  try {
+    const data = await API.get("/alerts/config");
+    const c = data.config || {};
+    document.getElementById("alert-severity").value = c.min_severity || "MEDIUM";
+    document.getElementById("alert-emails").value = c.emails || "";
+    document.getElementById("alert-ai").checked = !!c.include_ai;
+    document.getElementById("alert-enabled").checked = c.enabled !== false;
+    const channels = ["slack_url", "teams_url", "webhook_url"].filter((k) => c[`has_${k}`]).map((k) => k.replace("_url", ""));
+    document.getElementById("alert-status").textContent =
+      (data.licensed ? "" : "Licença atual não inclui alertas. ") +
+      (channels.length ? `Canais salvos: ${channels.join(", ")}` : "Nenhum webhook salvo") +
+      (data.smtp_configured ? " · SMTP ok" : " · e-mail: SMTP não configurado na instalação");
+  } catch (e) { /* sem permissão */ }
+}
+
+function alertBody() {
+  const val = (id) => document.getElementById(id).value.trim();
+  return {
+    enabled: document.getElementById("alert-enabled").checked,
+    min_severity: val("alert-severity"),
+    slack_url: val("alert-slack") || null,
+    teams_url: val("alert-teams") || null,
+    webhook_url: val("alert-webhook") || null,
+    emails: val("alert-emails"),
+    include_ai: document.getElementById("alert-ai").checked,
+  };
+}
+
+document.getElementById("alert-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const res = await fetch("/api/alerts/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json",
+        ...(state.selectedClusterId ? { "X-Cluster-Id": state.selectedClusterId } : {}) },
+      body: JSON.stringify(alertBody()),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Erro ${res.status}`);
+    for (const id of ["alert-slack", "alert-teams", "alert-webhook"]) document.getElementById(id).value = "";
+    toast("Alertas salvos", "success");
+    await loadAlertsConfig();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+});
+
+document.getElementById("alert-test").addEventListener("click", async () => {
+  try {
+    const result = await API.post("/alerts/test", {});
+    const text = Object.entries(result.results).map(([k, v]) => `${k}: ${v}`).join(" · ");
+    toast(`Teste enviado — ${text}`, Object.values(result.results).every((v) => v === "ok") ? "success" : "error");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+});
+
+async function loadCosts() {
+  try {
+    const c = await API.get("/costs");
+    document.getElementById("cost-cpu").value = c.cpu_month || "";
+    document.getElementById("cost-gb").value = c.gb_month || "";
+  } catch (e) { /* sem permissão */ }
+}
+
+document.getElementById("cost-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const res = await fetch("/api/costs", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json",
+        ...(state.selectedClusterId ? { "X-Cluster-Id": state.selectedClusterId } : {}) },
+      body: JSON.stringify({
+        cpu_month: Number(document.getElementById("cost-cpu").value || 0),
+        gb_month: Number(document.getElementById("cost-gb").value || 0),
+      }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Erro ${res.status}`);
+    toast("Custos salvos. Faça uma Nova Avaliação para recalcular.", "success");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+});
 
 // ── Licença ─────────────────────────────────────────────────
 

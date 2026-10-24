@@ -18,6 +18,9 @@ rbac:
 # Coleta automática de amostras (minutos; 0 desativa).
 sampleMinutes: 15
 
+# Tempo máximo (s) de cada chamada ao provedor de IA (IA local em CPU precisa de mais).
+aiTimeoutSeconds: 240
+
 # Namespaces onde a ferramenta nunca propõe execução.
 protectedNamespaces: "kube-system,kube-public,kube-node-lease,monitoring"
 

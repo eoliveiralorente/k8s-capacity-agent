@@ -17,7 +17,7 @@ from assistant.tools import run_tool, tool_schemas
 MAX_STEPS = 6
 MAX_TOKENS = 1500
 MAX_HISTORY = 10
-TIMEOUT = 90
+TIMEOUT = int(os.getenv("CAPACITY_AGENT_AI_TIMEOUT", "240"))  # IA local em CPU é mais lenta
 
 SYSTEM_PROMPT = """Você é o assistente de SRE do Capacity Agent, ajudando profissionais de DevOps/SRE
 a diagnosticar clusters Kubernetes. Responda sempre em português do Brasil.
