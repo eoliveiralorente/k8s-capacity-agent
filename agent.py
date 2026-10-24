@@ -501,6 +501,21 @@ def cmd_collect(args):
     return run_collector(panel_url, token, interval_seconds=interval, once=args.once)
 
 
+def cmd_demo(args):
+    """Ambiente de demonstração com dados fictícios (nunca usa um cluster real)."""
+    from support.demo import DEMO_CLUSTER, DEMO_COMPANY, seed_demo
+
+    result = seed_demo(email=args.email, password=args.password)
+    print(f"Ambiente demo pronto: {DEMO_COMPANY} · cluster {DEMO_CLUSTER}")
+    print(f"  Login: {result['email']}")
+    if result["password"]:
+        print(f"  Senha: {result['password']}   (guarde agora; não será exibida de novo)")
+    else:
+        print("  Conta já existia: use a mesma senha de antes (ou rode com --password para uma conta nova)")
+    print("  Rode de novo quando quiser renovar os dados (o histórico de 7 dias é refeito).")
+    return 0
+
+
 def cmd_support_bundle(args):
     """Gera o pacote de suporte pela linha de comando (útil se o painel não abre)."""
     from support.bundle import build_bundle
@@ -668,6 +683,10 @@ def build_parser():
     collect_parser.add_argument("--interval", type=int, help="Segundos entre envios (padrão 900)")
     collect_parser.add_argument("--once", action="store_true", help="Envia um snapshot e sai")
 
+    demo_parser = subparsers.add_parser("demo", help="Criar/atualizar o ambiente de demonstração (dados fictícios)")
+    demo_parser.add_argument("--email", default="demo@capacity-agent.local")
+    demo_parser.add_argument("--password", default=None, help="Senha da conta demo (gerada se omitida)")
+
     bundle_parser = subparsers.add_parser("support-bundle", help="Gerar pacote de suporte (.zip sem segredos)")
     bundle_parser.add_argument("-o", "--output", default="capacity-agent-suporte.zip",
                                help="Arquivo de saída (use - para stdout)")
@@ -693,6 +712,7 @@ def main():
         "cenario-doc": cmd_cenario_doc,
         "collect": cmd_collect,
         "support-bundle": cmd_support_bundle,
+        "demo": cmd_demo,
     }
 
     if args.command is None:

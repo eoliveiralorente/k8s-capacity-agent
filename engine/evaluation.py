@@ -46,6 +46,8 @@ def agent_snapshot_data():
     data = snapshot_to_data(snapshot)
     data["snapshot_age_minutes"] = round(age_min, 1)
     data["snapshot_stale"] = age_min > SNAPSHOT_STALE_MINUTES
+    if snapshot.get("demo"):  # ambiente de demonstração: dados fictícios não "envelhecem"
+        data["snapshot_age_minutes"], data["snapshot_stale"] = 0, False
     return data
 
 

@@ -43,7 +43,11 @@ def build_alerts(report):
     pending = (report.get("summary") or {}).get("pending_pods", 0)
     if pending:
         causes = (report.get("scheduling") or {}).get("causes", {})
-        top = ", ".join(f"{k} ({v})" for k, v in sorted(causes.items(), key=lambda i: -i[1])[:3])
+        labels = {"INSUFFICIENT_MEMORY": "memória insuficiente", "INSUFFICIENT_CPU": "CPU insuficiente",
+                  "PVC": "volume (PVC)", "TAINT": "taint sem toleration", "AFFINITY": "regra de afinidade",
+                  "NODE_SELECTOR": "nodeSelector sem node compatível"}
+        top = ", ".join(f"{labels.get(k, k.replace('_', ' ').lower())} ({v})"
+                        for k, v in sorted(causes.items(), key=lambda i: -i[1])[:3])
         add("pods-pending", "MEDIUM", f"{pending} pod(s) Pending", f"Causas principais: {top or 'ver Scheduling'}.")
 
     for rec in report.get("recommendations", []) or []:

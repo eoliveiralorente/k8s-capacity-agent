@@ -1368,6 +1368,12 @@ const REC_TYPE_LABELS = {
   HPA_AT_MAX: "HPA no limite",
   HPA_WITHOUT_REQUESTS: "HPA sem requests",
   UNDERUTILIZED: "Pool subutilizado",
+  UNDERUTILIZED_POOL: "Pool de nodes subutilizado",
+  SCHEDULING_MEMORY: "Pods sem memória para agendar",
+  SCHEDULING_CPU: "Pods sem CPU para agendar",
+  SCHEDULING_COMBINED: "Pods sem CPU e memória para agendar",
+  PVC_SCHEDULING: "Pods presos por volume (PVC)",
+  UNKNOWN_SCHEDULING: "Pods Pending (causa a investigar)",
 };
 const SEV_RANK = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 

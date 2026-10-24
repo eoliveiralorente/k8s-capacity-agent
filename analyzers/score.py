@@ -6,6 +6,22 @@ nota aparece em "factors".
 """
 
 SEVERITY_ORDER = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+TYPE_LABELS = {
+    "RIGHTSIZE_REQUESTS": "ajustar requests (sobra)",
+    "INCREASE_REQUESTS": "aumentar requests",
+    "MISSING_REQUESTS": "definir requests ausentes",
+    "INCREASE_REPLICAS": "aumentar réplicas",
+    "REDUCE_REPLICAS": "reduzir réplicas",
+    "CREATE_HPA": "criar HPA",
+    "HPA_AT_MAX": "HPA no limite",
+    "HPA_WITHOUT_REQUESTS": "HPA sem requests",
+    "UNDERUTILIZED_POOL": "pool de nodes subutilizado",
+    "SCHEDULING_MEMORY": "pods sem memória para agendar",
+    "SCHEDULING_CPU": "pods sem CPU para agendar",
+    "SCHEDULING_COMBINED": "pods sem CPU e memória para agendar",
+    "PVC_SCHEDULING": "pods presos por volume (PVC)",
+    "UNKNOWN_SCHEDULING": "pods Pending",
+}
 
 
 def _fmt_brl(value):
@@ -36,7 +52,8 @@ def build_overview(report):
     for a in alerts:
         if a["key"].startswith("rec:"):
             a["severity"] = "MEDIUM"
-            a["title"] = a["title"].replace("Recomendação crítica: ", "Ajuste recomendado: ")
+            rec_type = a["title"].replace("Recomendação crítica: ", "")
+            a["title"] = "Ajuste recomendado: " + TYPE_LABELS.get(rec_type, rec_type)
     alerts.sort(key=lambda a: (SEVERITY_ORDER.get(a["severity"], 9), a["key"].startswith("rec:")))
     high = [a for a in alerts if a["severity"] == "HIGH"]
     medium = [a for a in alerts if a["severity"] == "MEDIUM" and not a["key"].startswith("rec:")]
