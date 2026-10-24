@@ -1,0 +1,39 @@
+# URL HTTPS do painel do Capacity Agent (obrigatório).
+panelUrl: ""
+
+# Token de ingestão gerado no painel (Cluster → "Gerar instalação do agente").
+# Prefira existingSecret em produção para não deixar o token no histórico do shell.
+ingestToken: ""
+# Secret já existente com a chave "token" (se definido, ingestToken é ignorado).
+existingSecret: ""
+
+# Intervalo entre envios, em segundos.
+intervalSeconds: 900
+
+image:
+  repository: ghcr.io/OWNER/k8s-capacity-agent   # troque OWNER pelo seu usuário/organização do GitHub
+  tag: ""                                         # vazio = appVersion do chart
+  pullPolicy: IfNotPresent
+imagePullSecrets: []        # ex.: [{name: ghcr-pull}] se a imagem for privada
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+# Restringe a saída de rede do coletor (requer CNI com suporte a NetworkPolicy).
+networkPolicy:
+  enabled: false
+  # Liberar DNS e o painel. Ajuste os CIDRs do painel e da API do Kubernetes.
+  egressCidrs:
+    - 0.0.0.0/0
+
+# CA adicional para o painel (ex.: certificado interno). Nome de um ConfigMap com a chave ca.crt.
+caConfigMap: ""
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}

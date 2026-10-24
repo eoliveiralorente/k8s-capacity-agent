@@ -1,0 +1,33 @@
+# Somente leitura: o coletor nunca altera o cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "collector.fullname" . }}-readonly
+  labels: {{- include "collector.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "pods", "events", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "collector.fullname" . }}-readonly
+  labels: {{- include "collector.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "collector.fullname" . }}-readonly
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "collector.fullname" . }}
+    namespace: {{ .Release.Namespace }}

@@ -1,0 +1,7 @@
+apiVersion: v2
+name: capacity-collector
+description: Coletor somente leitura do Capacity Agent — envia snapshots do cluster ao painel (conexão só de saída).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords: [kubernetes, capacity, sre, finops]

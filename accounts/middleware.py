@@ -7,6 +7,7 @@ from accounts.rbac import has_role, required_role
 from accounts.store import get_cluster, get_session, list_clusters
 from tenant_context import (
     current_cluster_id,
+    current_cluster_mode,
     current_cluster_name,
     current_cluster_provider,
     current_tenant_id,
@@ -14,8 +15,10 @@ from tenant_context import (
 )
 
 
-PUBLIC_API_PATHS = {"/api/auth/register", "/api/auth/login", "/api/auth/accept-invite"}
-PUBLIC_PATHS = {"/", "/favicon.ico"}
+PUBLIC_API_PATHS = {"/api/auth/register", "/api/auth/login", "/api/auth/accept-invite", "/api/auth/setup"}
+# Autenticado por token de ingestão (Bearer) no próprio endpoint, não por cookie.
+TOKEN_API_PATHS = {"/api/ingest"}
+PUBLIC_PATHS = {"/", "/favicon.ico", "/healthz"}
 
 
 class TenantAuthenticationMiddleware:
@@ -47,6 +50,10 @@ class TenantAuthenticationMiddleware:
                 response = JSONResponse({"detail": "Origem da requisição não autorizada"}, status_code=403)
                 await response(scope, receive, send)
                 return
+
+        if path in TOKEN_API_PATHS:
+            await self.app(scope, receive, send)
+            return
 
         if path in PUBLIC_API_PATHS:
             await self.app(scope, receive, send)
@@ -86,6 +93,7 @@ class TenantAuthenticationMiddleware:
             (current_cluster_id, current_cluster_id.set(cluster["id"] if cluster else None)),
             (current_cluster_name, current_cluster_name.set(cluster["name"] if cluster else None)),
             (current_cluster_provider, current_cluster_provider.set("kubernetes" if cluster else None)),
+            (current_cluster_mode, current_cluster_mode.set((cluster or {}).get("mode") or ("kubeconfig" if cluster else None))),
         ]
         try:
             await self.app(scope, receive, send)

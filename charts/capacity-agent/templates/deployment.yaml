@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ca.fullname" . }}
+  labels: {{- include "ca.labels" . | nindent 4 }}
+spec:
+  replicas: 1            # SQLite: uma réplica por instalação
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {{- include "ca.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "ca.selector" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "ca.fullname" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: panel
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: CAPACITY_AGENT_SINGLE_TENANT
+              value: "true"
+            - name: CAPACITY_AGENT_INCLUSTER
+              value: "true"
+            - name: CAPACITY_AGENT_INCLUSTER_NAME
+              value: {{ .Values.clusterName | quote }}
+            - name: CAPACITY_AGENT_PROVIDER
+              value: kubernetes
+            - name: CAPACITY_AGENT_STATE_DIR
+              value: /data/state
+            - name: CAPACITY_AGENT_ACCOUNT_DB
+              value: /data/accounts.sqlite3
+            - name: CAPACITY_AGENT_COOKIE_SECURE
+              value: {{ .Values.secureCookies | quote }}
+            - name: CAPACITY_AGENT_SAMPLE_MINUTES
+              value: {{ .Values.sampleMinutes | quote }}
+            - name: CAPACITY_AGENT_PROTECTED_NAMESPACES
+              value: {{ .Values.protectedNamespaces | quote }}
+            - name: CAPACITY_AGENT_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ca.keySecret" . }}
+                  key: key
+            - name: HOME
+              value: /tmp
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "ca.claim" . }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -99,6 +99,8 @@ function applyRoleUi() {
   if (evaluate) evaluate.classList.toggle("hidden", !can("operador"));
   const clusterForm = document.getElementById("cluster-form");
   if (clusterForm) clusterForm.classList.toggle("hidden", !can("admin"));
+  const agentForm = document.getElementById("agent-cluster-form");
+  if (agentForm) agentForm.classList.toggle("hidden", !can("admin"));
 }
 
 function showApp(user) {
@@ -1014,8 +1016,13 @@ async function loadStatus() {
   document.getElementById("header-company").textContent = state.status.company_name || state.user?.company_name || "";
   const activeCluster = state.clusters.find((item) => item.id === state.selectedClusterId);
   document.getElementById("cluster-name").textContent = activeCluster
-    ? `${activeCluster.name} · ${activeCluster.context_name}`
+    ? `${activeCluster.name} · ${activeCluster.mode === "agent"
+        ? `agente${activeCluster.last_seen_at ? " · último envio " + formatDate(activeCluster.last_seen_at) : " · aguardando primeiro envio"}`
+        : activeCluster.context_name}`
     : "Cluster não selecionado";
+  document.getElementById("btn-rotate-token").classList.toggle(
+    "hidden", !(activeCluster?.mode === "agent" && can("admin"))
+  );
 
   const reportDate = state.status.latest_report?.created_at;
   const gateDate = state.status.gate?.updated_at;
@@ -1090,7 +1097,7 @@ async function loadClusters() {
   }
   const selector = document.getElementById("cluster-selector");
   selector.innerHTML = `<option value="">Nenhum cluster</option>${state.clusters.map((cluster) =>
-    `<option value="${escapeHtml(cluster.id)}">${escapeHtml(cluster.name)} · ${escapeHtml(cluster.context_name)}</option>`
+    `<option value="${escapeHtml(cluster.id)}">${escapeHtml(cluster.name)} · ${cluster.mode === "agent" ? "agente" : escapeHtml(cluster.context_name)}</option>`
   ).join("")}`;
   selector.value = state.selectedClusterId;
   const activeCluster = state.clusters.find((item) => item.id === state.selectedClusterId);
@@ -1201,6 +1208,48 @@ document.getElementById("cluster-form").addEventListener("submit", async (event)
     toast(error.message, "error");
   } finally {
     submit.disabled = false;
+  }
+});
+
+function showAgentInstructions(title, result) {
+  const ins = result.instructions || {};
+  openModal(
+    title,
+    `<p><strong>Copie o token agora:</strong> por segurança ele não será exibido de novo.</p>
+     <dl class="rec-detail">
+       <dt>Token de ingestão</dt><dd class="mono">${escapeHtml(result.token)}</dd>
+       <dt>Instalar no cluster (Helm)</dt><dd><pre class="mono" style="white-space:pre-wrap">${escapeHtml(ins.helm || "")}</pre></dd>
+       <dt>Testar localmente (WSL, com kubeconfig do cluster)</dt><dd><pre class="mono" style="white-space:pre-wrap">${escapeHtml(ins.local_test || "")}</pre></dd>
+     </dl>
+     <p style="color:var(--text-muted);font-size:12px">O coletor só lê o cluster e envia dados para ${escapeHtml(ins.panel_url || "o painel")}. Para remover: helm uninstall capacity-collector -n capacity-agent</p>`,
+    `<button class="btn btn-primary" onclick="closeModal()">Fechar</button>`
+  );
+}
+
+document.getElementById("agent-cluster-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  try {
+    const result = await API.post("/clusters/agent", {
+      name: document.getElementById("agent-cluster-name").value.trim(),
+    });
+    state.selectedClusterId = result.cluster.id;
+    form.reset();
+    showAgentInstructions("Instalar o agente no cluster", result);
+    await refresh();
+  } catch (error) {
+    toast(error.message, "error");
+  }
+});
+
+document.getElementById("btn-rotate-token").addEventListener("click", async () => {
+  if (!state.selectedClusterId) return;
+  if (!confirm("Gerar um novo token? O token atual deixa de funcionar imediatamente.")) return;
+  try {
+    const result = await API.post(`/clusters/${state.selectedClusterId}/rotate-token`, {});
+    showAgentInstructions("Novo token do agente", result);
+  } catch (error) {
+    toast(error.message, "error");
   }
 });
 
@@ -1387,11 +1436,22 @@ function prepareInviteScreen() {
   return true;
 }
 
+async function applySetupMode() {
+  try {
+    const setup = await (await fetch("/api/auth/setup")).json();
+    if (!setup.registration_open) {
+      const tab = document.querySelector('[data-auth-view="register"]');
+      if (tab && !state.inviteToken) tab.classList.add("hidden");
+    }
+  } catch (e) { /* mantém a tela padrão */ }
+}
+
 async function bootstrap() {
   if (prepareInviteScreen()) {
     showAuthScreen("Você foi convidado. Crie seu acesso para entrar na empresa.");
     return;
   }
+  await applySetupMode();
   try {
     const user = await API.get("/auth/me");
     showApp(user);

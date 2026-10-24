@@ -1,0 +1,10 @@
+Capacity Collector instalado (somente leitura).
+
+Verificar:
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "collector.fullname" . }} --tail=20
+  # Esperado: "[collector] enviado: N nodes, M pods — HTTP 200"
+
+O cluster aparece no painel {{ .Values.panelUrl }} após o primeiro envio.
+
+Remover:
+  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}

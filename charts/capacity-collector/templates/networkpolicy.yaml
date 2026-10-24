@@ -1,0 +1,24 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "collector.fullname" . }}
+  labels: {{- include "collector.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "collector.selector" . | nindent 6 }}
+  policyTypes: ["Ingress", "Egress"]
+  ingress: []
+  egress:
+    - ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - to:
+        {{- range .Values.networkPolicy.egressCidrs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: 6443 }
+{{- end }}

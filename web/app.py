@@ -22,7 +22,13 @@ from accounts.store import (
     list_invites,
     list_users,
     set_user_role,
+    count_tenants,
+    create_agent_cluster,
+    ensure_incluster_cluster,
     create_cluster,
+    find_cluster_by_ingest_token,
+    rotate_ingest_token,
+    touch_agent_cluster,
     create_session,
     delete_cluster,
     delete_session,
@@ -60,7 +66,9 @@ from executors.gke import execute_operation
 from reporters.executive import build_executive_report
 from tenant_context import (
     current_cluster_id,
+    current_cluster_mode,
     current_cluster_name,
+    current_tenant_id,
     current_cluster_provider,
     current_user,
 )
@@ -119,6 +127,10 @@ class RoleRequest(BaseModel):
     role: str = Field(pattern="^(leitor|operador|admin)$")
 
 
+class AgentClusterRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+
+
 class ClusterRequest(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     kubeconfig: str = Field(min_length=1, max_length=2_000_000)
@@ -169,8 +181,38 @@ def _set_session_cookie(response, token):
     )
 
 
+SINGLE_TENANT = os.getenv("CAPACITY_AGENT_SINGLE_TENANT", "false").lower() == "true"
+INCLUSTER = os.getenv("CAPACITY_AGENT_INCLUSTER", "false").lower() == "true"
+INCLUSTER_NAME = os.getenv("CAPACITY_AGENT_INCLUSTER_NAME", "Este cluster")
+
+
+def _ensure_incluster(user):
+    if INCLUSTER and user and user.get("tenant_id"):
+        ensure_incluster_cluster(user["tenant_id"], INCLUSTER_NAME)
+
+
+@app.get("/healthz")
+def healthz():
+    from engine import sampler
+
+    return {"status": "ok", "single_tenant": SINGLE_TENANT, "incluster": INCLUSTER,
+            "sampler_minutes": sampler.SAMPLE_MINUTES}
+
+
+@app.get("/api/auth/setup")
+def api_auth_setup():
+    """Informa à tela de login se o cadastro inicial ainda está aberto."""
+    return {"registration_open": not SINGLE_TENANT or count_tenants() == 0,
+            "single_tenant": SINGLE_TENANT}
+
+
 @app.post("/api/auth/register")
 def api_register(body: RegisterRequest, response: Response):
+    if SINGLE_TENANT and count_tenants() > 0:
+        raise HTTPException(
+            status_code=403,
+            detail="Instalação de empresa única: peça um convite ao administrador",
+        )
     email = body.email.strip().lower()
     if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
         raise HTTPException(status_code=422, detail="Informe um e-mail válido")
@@ -178,6 +220,7 @@ def api_register(body: RegisterRequest, response: Response):
         user = register_account(body.company_name, body.full_name, email, body.password)
     except DuplicateAccountError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    _ensure_incluster(user)
     token, _ = create_session(user["id"])
     _set_session_cookie(response, token)
     return user
@@ -213,6 +256,7 @@ def api_login(body: LoginRequest, request: Request, response: Response):
         _login_failures.setdefault(key, []).append(time.monotonic())
         raise HTTPException(status_code=401, detail="E-mail ou senha inválidos")
     _login_failures.pop(key, None)
+    _ensure_incluster(user)
     token, _ = create_session(user["id"])
     _set_session_cookie(response, token)
     return user
@@ -330,6 +374,125 @@ def api_add_cluster(body: ClusterRequest):
     return {"success": True, "cluster": cluster}
 
 
+def _collector_instructions(request, token):
+    panel = os.getenv("CAPACITY_AGENT_PUBLIC_URL", "").rstrip("/") or str(request.base_url).rstrip("/")
+    image = os.getenv("CAPACITY_AGENT_COLLECTOR_IMAGE", "ghcr.io/<owner>/k8s-capacity-agent")
+    chart = os.getenv("CAPACITY_AGENT_COLLECTOR_CHART", "./charts/capacity-collector")
+    return {
+        "panel_url": panel,
+        "helm": (
+            f"helm upgrade --install capacity-collector {chart} \\\n"
+            f"  --namespace capacity-agent --create-namespace \\\n"
+            f"  --set panelUrl={panel} \\\n"
+            f"  --set image.repository={image} \\\n"
+            f"  --set ingestToken={token}"
+        ),
+        "local_test": (
+            f"CAPACITY_AGENT_PANEL_URL={panel} CAPACITY_AGENT_INGEST_TOKEN={token} "
+            "python3 agent.py collect --once"
+        ),
+    }
+
+
+@app.post("/api/clusters/agent")
+def api_add_agent_cluster(body: AgentClusterRequest, request: Request):
+    user = current_user.get()
+    try:
+        cluster, token = create_agent_cluster(user["tenant_id"], body.name)
+    except DuplicateClusterError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    append_audit("agent_cluster_created", {"cluster": cluster["name"], "by": _actor()})
+    return {"success": True, "cluster": cluster, "token": token,
+            "instructions": _collector_instructions(request, token)}
+
+
+@app.post("/api/clusters/{cluster_id}/rotate-token")
+def api_rotate_token(cluster_id: str, request: Request):
+    user = current_user.get()
+    token = rotate_ingest_token(user["tenant_id"], cluster_id)
+    if not token:
+        raise HTTPException(status_code=404, detail="Cluster via agente não encontrado nesta empresa")
+    append_audit("agent_token_rotated", {"cluster_id": cluster_id, "by": _actor()})
+    return {"success": True, "token": token, "instructions": _collector_instructions(request, token)}
+
+
+MAX_INGEST_COMPRESSED = 20 * 1024 * 1024
+MIN_INGEST_INTERVAL_SECONDS = 60
+
+
+@app.post("/api/ingest")
+async def api_ingest(request: Request):
+    import gzip
+    import json as jsonlib
+    import zlib
+    from datetime import datetime, timezone
+
+    from analyzers.capacity import analyze_capacity
+    from analyzers.workloads import collect_workloads
+    from approval.store import save_cluster_snapshot, save_metric_samples, save_workload_samples
+    from collectors.snapshot import MAX_SNAPSHOT_BYTES, snapshot_to_data, validate_snapshot
+
+    auth = request.headers.get("authorization", "")
+    token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+    cluster = find_cluster_by_ingest_token(token)
+    if not cluster:
+        raise HTTPException(status_code=401, detail="Token de ingestão inválido ou revogado")
+
+    if cluster.get("last_seen_at"):
+        elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(cluster["last_seen_at"])).total_seconds()
+        if elapsed < MIN_INGEST_INTERVAL_SECONDS:
+            raise HTTPException(status_code=429, detail="Envio muito frequente; aguarde 1 minuto")
+
+    length = int(request.headers.get("content-length") or 0)
+    if length > MAX_INGEST_COMPRESSED:
+        raise HTTPException(status_code=413, detail="Snapshot muito grande")
+    raw = await request.body()
+    if len(raw) > MAX_INGEST_COMPRESSED:
+        raise HTTPException(status_code=413, detail="Snapshot muito grande")
+    try:
+        if request.headers.get("content-encoding", "").lower() == "gzip":
+            decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+            raw = decompressor.decompress(raw, MAX_SNAPSHOT_BYTES + 1)
+            if len(raw) > MAX_SNAPSHOT_BYTES or decompressor.unconsumed_tail:
+                raise HTTPException(status_code=413, detail="Snapshot descomprimido muito grande")
+        snapshot = jsonlib.loads(raw)
+        validate_snapshot(snapshot)
+    except HTTPException:
+        raise
+    except (ValueError, zlib.error, gzip.BadGzipFile) as exc:
+        raise HTTPException(status_code=422, detail=f"Snapshot inválido: {exc}") from exc
+
+    tokens = [
+        (current_tenant_id, current_tenant_id.set(cluster["tenant_id"])),
+        (current_cluster_id, current_cluster_id.set(cluster["id"])),
+        (current_cluster_name, current_cluster_name.set(cluster["name"])),
+        (current_cluster_mode, current_cluster_mode.set("agent")),
+    ]
+    try:
+        save_cluster_snapshot(snapshot)
+        data = snapshot_to_data(snapshot)
+        if data["node_metrics"]:
+            save_metric_samples(analyze_capacity(data["nodes"], data["pods"], data["node_metrics"], data["pod_metrics"]))
+            samples, _ = collect_workloads(data["pods"], data["container_metrics"])
+            if samples:
+                save_workload_samples(samples)
+        touch_agent_cluster(cluster["id"], len(data["nodes"]["items"]))
+    finally:
+        for var, value in reversed(tokens):
+            var.reset(value)
+
+    return {"success": True, "detail": "snapshot recebido"}
+
+
+def _agent_snapshot_or_409():
+    from approval.store import load_cluster_snapshot
+
+    snapshot = load_cluster_snapshot()
+    if not snapshot:
+        raise HTTPException(status_code=409, detail="O coletor ainda não enviou dados deste cluster")
+    return snapshot
+
+
 @app.delete("/api/clusters/{cluster_id}")
 def api_delete_cluster(cluster_id: str):
     user = current_user.get()
@@ -374,6 +537,18 @@ def api_status():
 def api_cluster():
     if not current_cluster_id.get():
         raise HTTPException(status_code=409, detail="Cadastre ou selecione um cluster")
+    if current_cluster_mode.get() == "agent":
+        from collectors.kubernetes import parse_nodes_overview
+
+        snapshot = _agent_snapshot_or_409()
+        return {
+            "context": f"agente · último envio {snapshot['_received_at']}",
+            "nodes": parse_nodes_overview(snapshot["nodes"]),
+            "kubeconfig_configured": False,
+            "provider": "kubernetes",
+            "mode": "agent",
+            "last_seen_at": snapshot["_received_at"],
+        }
     try:
         overview = get_cluster_overview()
     except (OSError, RuntimeError, ValueError) as exc:
@@ -390,7 +565,12 @@ def api_cluster_pods(namespace: str | None = None):
     if not current_cluster_id.get():
         raise HTTPException(status_code=409, detail="Cadastre ou selecione um cluster")
     try:
-        pods = get_cluster_pods()
+        if current_cluster_mode.get() == "agent":
+            from collectors.kubernetes import parse_cluster_pods
+
+            pods = parse_cluster_pods(_agent_snapshot_or_409()["pods"])
+        else:
+            pods = get_cluster_pods()
     except (OSError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=503, detail=f"Falha ao consultar pods: {exc}") from exc
 
@@ -416,6 +596,11 @@ def api_cluster_pod_logs(
 ):
     if not current_cluster_id.get():
         raise HTTPException(status_code=409, detail="Cadastre ou selecione um cluster")
+    if current_cluster_mode.get() == "agent":
+        raise HTTPException(
+            status_code=409,
+            detail="Logs não ficam disponíveis no modo agente (somente leitura, sem acesso direto à API)",
+        )
     if not re.fullmatch(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?", namespace) or len(namespace) > 63:
         raise HTTPException(status_code=422, detail="Namespace Kubernetes inválido")
     if (

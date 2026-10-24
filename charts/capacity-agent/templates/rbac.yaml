@@ -1,0 +1,64 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "ca.fullname" . }}-read
+  labels: {{- include "ca.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "pods", "events", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  {{- if .Values.rbac.readLogs }}
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  {{- end }}
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "ca.fullname" . }}-read
+  labels: {{- include "ca.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "ca.fullname" . }}-read
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "ca.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+{{- if .Values.rbac.allowRightsizing }}
+---
+# Escrita limitada a ajustar requests de workloads, sempre após aprovação no painel.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "ca.fullname" . }}-rightsizing
+  labels: {{- include "ca.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "ca.fullname" . }}-rightsizing
+  labels: {{- include "ca.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "ca.fullname" . }}-rightsizing
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "ca.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

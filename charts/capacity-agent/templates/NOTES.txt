@@ -1,0 +1,17 @@
+Capacity Agent instalado em {{ .Release.Namespace }} ({{ if .Values.rbac.allowRightsizing }}leitura + rightsizing aprovado{{ else }}somente leitura{{ end }}).
+
+Acessar:
+{{- if .Values.ingress.enabled }}
+  https://{{ .Values.ingress.host }}
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ca.fullname" . }} 8080:{{ .Values.service.port }}
+  Abra http://localhost:8080
+{{- end }}
+
+Primeiro acesso: "Criar conta" cria o administrador. Depois disso o cadastro fecha;
+novos usuários entram por convite (aba Usuários).
+
+Saúde:   kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+Backup:  o PVC {{ include "ca.claim" . }} e o Secret {{ include "ca.keySecret" . }} devem ser salvos JUNTOS.
+Remover: helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+         (PVC e Secret são mantidos de propósito; apague-os manualmente se quiser limpar tudo.)

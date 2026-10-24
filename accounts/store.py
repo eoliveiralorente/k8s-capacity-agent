@@ -84,6 +84,18 @@ def initialize_database():
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)")}
         if "role" not in columns:
             connection.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'")
+        # Migração modo agente: clusters conectados por coletor in-cluster.
+        cluster_columns = {row["name"] for row in connection.execute("PRAGMA table_info(clusters)")}
+        if "mode" not in cluster_columns:
+            connection.execute("ALTER TABLE clusters ADD COLUMN mode TEXT NOT NULL DEFAULT 'kubeconfig'")
+        if "ingest_token_hash" not in cluster_columns:
+            connection.execute("ALTER TABLE clusters ADD COLUMN ingest_token_hash TEXT")
+        if "last_seen_at" not in cluster_columns:
+            connection.execute("ALTER TABLE clusters ADD COLUMN last_seen_at TEXT")
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS clusters_ingest_idx ON clusters(ingest_token_hash) "
+            "WHERE ingest_token_hash IS NOT NULL"
+        )
     try:
         DB_PATH.chmod(0o600)
         DB_PATH.parent.chmod(0o700)
@@ -317,11 +329,96 @@ def create_cluster(tenant_id, name, kubeconfig, context_name, node_count):
             "node_count": node_count, "created_at": now}
 
 
+def _hash_ingest_token(token):
+    return hashlib.sha256(("ingest:" + (token or "")).encode("utf-8")).hexdigest()
+
+
+def create_agent_cluster(tenant_id, name):
+    """Cluster conectado por coletor in-cluster. Retorna (cluster, token em claro — exibido uma vez)."""
+    initialize_database()
+    fernet, _ = _fernet()
+    token = "cag_" + secrets.token_urlsafe(32)
+    cluster_id = uuid.uuid4().hex
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        with _connect() as connection:
+            connection.execute(
+                "INSERT INTO clusters(id, tenant_id, name, context_name, node_count, kubeconfig_ciphertext, "
+                "created_at, mode, ingest_token_hash) VALUES (?, ?, ?, ?, 0, ?, ?, 'agent', ?)",
+                (cluster_id, tenant_id, name.strip(), "agente", fernet.encrypt(b""), now,
+                 _hash_ingest_token(token)),
+            )
+    except sqlite3.IntegrityError as exc:
+        raise DuplicateClusterError("Já existe um cluster com esse nome nesta empresa") from exc
+    return {"id": cluster_id, "name": name.strip(), "context_name": "agente", "node_count": 0,
+            "created_at": now, "mode": "agent", "last_seen_at": None}, token
+
+
+def rotate_ingest_token(tenant_id, cluster_id):
+    initialize_database()
+    token = "cag_" + secrets.token_urlsafe(32)
+    with _connect() as connection:
+        cursor = connection.execute(
+            "UPDATE clusters SET ingest_token_hash = ? WHERE id = ? AND tenant_id = ? AND mode = 'agent'",
+            (_hash_ingest_token(token), cluster_id, tenant_id),
+        )
+    return token if cursor.rowcount else None
+
+
+def count_tenants():
+    initialize_database()
+    with _connect() as connection:
+        return connection.execute("SELECT COUNT(*) FROM tenants").fetchone()[0]
+
+
+def ensure_incluster_cluster(tenant_id, name):
+    """Modo self-hosted: registra o próprio cluster (acesso via ServiceAccount do pod)."""
+    initialize_database()
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT id FROM clusters WHERE tenant_id = ? AND mode = 'incluster'", (tenant_id,)
+        ).fetchone()
+        if row:
+            return row["id"]
+    fernet, _ = _fernet()
+    cluster_id = uuid.uuid4().hex
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as connection:
+        connection.execute(
+            "INSERT INTO clusters(id, tenant_id, name, context_name, node_count, kubeconfig_ciphertext, "
+            "created_at, mode) VALUES (?, ?, ?, ?, 0, ?, ?, 'incluster')",
+            (cluster_id, tenant_id, name.strip(), "in-cluster", fernet.encrypt(b""), now),
+        )
+    return cluster_id
+
+
+def find_cluster_by_ingest_token(token):
+    if not token or not token.startswith("cag_"):
+        return None
+    initialize_database()
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT id, tenant_id, name, last_seen_at FROM clusters "
+            "WHERE ingest_token_hash = ? AND mode = 'agent'",
+            (_hash_ingest_token(token),),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def touch_agent_cluster(cluster_id, node_count, context_name=None):
+    with _connect() as connection:
+        connection.execute(
+            "UPDATE clusters SET last_seen_at = ?, node_count = ?, context_name = COALESCE(?, context_name) "
+            "WHERE id = ?",
+            (datetime.now(timezone.utc).isoformat(), node_count, context_name, cluster_id),
+        )
+
+
 def list_clusters(tenant_id):
     initialize_database()
     with _connect() as connection:
         rows = connection.execute(
-            "SELECT id, name, context_name, node_count, created_at FROM clusters "
+            "SELECT id, name, context_name, node_count, created_at, mode, last_seen_at FROM clusters "
             "WHERE tenant_id = ? ORDER BY created_at",
             (tenant_id,),
         ).fetchall()
@@ -334,8 +431,8 @@ def get_cluster(tenant_id, cluster_id):
     initialize_database()
     with _connect() as connection:
         row = connection.execute(
-            "SELECT id, tenant_id, name, context_name, node_count, kubeconfig_ciphertext, created_at "
-            "FROM clusters WHERE id = ? AND tenant_id = ?",
+            "SELECT id, tenant_id, name, context_name, node_count, kubeconfig_ciphertext, created_at, "
+            "mode, last_seen_at FROM clusters WHERE id = ? AND tenant_id = ?",
             (cluster_id, tenant_id),
         ).fetchone()
     return dict(row) if row else None
@@ -343,7 +440,7 @@ def get_cluster(tenant_id, cluster_id):
 
 def decrypt_cluster_kubeconfig(tenant_id, cluster_id):
     row = get_cluster(tenant_id, cluster_id)
-    if not row:
+    if not row or row.get("mode") == "agent":
         return None
     fernet, invalid_token = _fernet()
     try:
@@ -365,7 +462,9 @@ def list_all_clusters():
     """Todos os clusters de todas as empresas (uso interno do amostrador)."""
     initialize_database()
     with _connect() as connection:
-        rows = connection.execute("SELECT id, tenant_id, name FROM clusters ORDER BY created_at").fetchall()
+        rows = connection.execute(
+            "SELECT id, tenant_id, name, mode FROM clusters ORDER BY created_at"
+        ).fetchall()
     return [dict(row) for row in rows]
 
 

@@ -1,0 +1,84 @@
+{{- if not .Values.panelUrl }}
+{{- fail "Defina panelUrl com a URL HTTPS do painel" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "collector.fullname" . }}
+  labels: {{- include "collector.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {{- include "collector.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "collector.selector" . | nindent 8 }}
+      annotations:
+        checksum/token: {{ .Values.ingestToken | sha256sum | trunc 12 | quote }}
+        {{- with .Values.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
+    spec:
+      serviceAccountName: {{ include "collector.fullname" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: collector
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "agent.py", "collect"]
+          env:
+            - name: CAPACITY_AGENT_PANEL_URL
+              value: {{ .Values.panelUrl | quote }}
+            - name: CAPACITY_AGENT_COLLECT_SECONDS
+              value: {{ .Values.intervalSeconds | quote }}
+            - name: CAPACITY_AGENT_INGEST_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "collector.secretName" . }}
+                  key: token
+            - name: HOME
+              value: /tmp
+            {{- if .Values.caConfigMap }}
+            - name: CAPACITY_AGENT_CA_FILE
+              value: /etc/capacity-agent/ca/ca.crt
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.caConfigMap }}
+            - name: ca
+              mountPath: /etc/capacity-agent/ca
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        {{- if .Values.caConfigMap }}
+        - name: ca
+          configMap:
+            name: {{ .Values.caConfigMap }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}

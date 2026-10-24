@@ -1,0 +1,57 @@
+# Nome exibido para este cluster no painel.
+clusterName: "Este cluster"
+
+image:
+  repository: ghcr.io/OWNER/k8s-capacity-agent   # troque OWNER pelo seu usuário/organização do GitHub
+  tag: ""                                         # vazio = appVersion do chart
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Permissões no cluster.
+rbac:
+  # Leitura de nodes, pods, events, métricas e logs (necessário).
+  readLogs: true
+  # Permite aplicar rightsizing de requests (kubectl set resources) após aprovação.
+  # Desligado por padrão: a instalação é somente leitura.
+  allowRightsizing: false
+
+# Coleta automática de amostras (minutos; 0 desativa).
+sampleMinutes: 15
+
+# Namespaces onde a ferramenta nunca propõe execução.
+protectedNamespaces: "kube-system,kube-public,kube-node-lease,monitoring"
+
+# Cookies de sessão só por HTTPS. Mantenha true (port-forward em localhost também funciona).
+secureCookies: true
+
+# Chave de criptografia (Fernet). Vazio = gerada na instalação e mantida nos upgrades.
+encryption:
+  existingSecret: ""
+
+persistence:
+  size: 2Gi
+  storageClassName: ""   # vazio = StorageClass padrão do cluster
+  existingClaim: ""
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  host: capacity.exemplo.com.br
+  tlsSecretName: ""      # ex.: capacity-tls (cert-manager)
+  annotations: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}
