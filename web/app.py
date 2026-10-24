@@ -345,6 +345,69 @@ class CostSettingsRequest(BaseModel):
     gb_month: float = Field(ge=0, le=100000)
 
 
+class JournalCreateRequest(BaseModel):
+    kind: str = Field(pattern="^(pendencia|nota)$")
+    title: str = Field(min_length=2, max_length=200)
+    body: str = Field(default="", max_length=5000)
+    assignee: str = Field(default="", max_length=120)
+    due_date: str | None = Field(default=None, max_length=10)
+    link_type: str | None = Field(default=None, pattern="^(node|recommendation|pod|risk)$")
+    link_ref: str | None = Field(default=None, max_length=300)
+
+
+class JournalUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=2, max_length=200)
+    body: str | None = Field(default=None, max_length=5000)
+    status: str | None = Field(default=None, pattern="^(aberta|andamento|concluida)$")
+    assignee: str | None = Field(default=None, max_length=120)
+    due_date: str | None = Field(default=None, max_length=10)
+
+
+@app.get("/api/journal")
+def api_journal(status: str | None = None, kind: str | None = None):
+    from accounts.journal import list_entries, summary
+    tenant = current_user.get()["tenant_id"]
+    cluster = current_cluster_id.get()
+    return {"items": list_entries(tenant, cluster, status=status or None, kind=kind or None),
+            "summary": summary(tenant, cluster)}
+
+
+@app.post("/api/journal")
+def api_journal_create(body: JournalCreateRequest):
+    from accounts.journal import create_entry
+    try:
+        entry = create_entry(current_user.get()["tenant_id"], current_cluster_id.get(), _actor(), body.kind,
+                             body.title, body.body, body.assignee, body.due_date or None,
+                             body.link_type, body.link_ref)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    append_audit("journal_created", {"id": entry["id"], "kind": entry["kind"], "title": entry["title"][:120],
+                                     "by": _actor()})
+    return entry
+
+
+@app.patch("/api/journal/{entry_id}")
+def api_journal_update(entry_id: str, body: JournalUpdateRequest):
+    from accounts.journal import update_entry
+    try:
+        entry = update_entry(current_user.get()["tenant_id"], entry_id, _actor(), **body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not entry:
+        raise HTTPException(status_code=404, detail="Registro não encontrado")
+    append_audit("journal_updated", {"id": entry_id, "status": entry["status"], "by": _actor()})
+    return entry
+
+
+@app.delete("/api/journal/{entry_id}")
+def api_journal_delete(entry_id: str):
+    from accounts.journal import delete_entry
+    if not delete_entry(current_user.get()["tenant_id"], entry_id):
+        raise HTTPException(status_code=404, detail="Registro não encontrado")
+    append_audit("journal_deleted", {"id": entry_id, "by": _actor()})
+    return {"deleted": entry_id}
+
+
 @app.get("/api/costs")
 def api_costs():
     return get_cost_settings(current_user.get()["tenant_id"])

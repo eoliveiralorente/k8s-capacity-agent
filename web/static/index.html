@@ -72,6 +72,7 @@
         <button class="nav-item" data-tab="capacity">Nodes e capacidade</button>
         <button class="nav-item" data-tab="scheduling">Pods e scheduling</button>
         <button class="nav-item" data-tab="assistant">Assistente IA</button>
+        <button class="nav-item" data-tab="journal">Diário de bordo</button>
         <p class="nav-section">Governança</p>
         <button class="nav-item" data-tab="audit">Auditoria</button>
         <a class="nav-item nav-link" href="/relatorio" target="_blank">Relatório executivo ↗</a>
@@ -134,6 +135,11 @@
             <div class="panel-header"><h3>Maiores economias</h3><button class="btn btn-ghost btn-sm" data-goto="recommendations">Ver todas</button></div>
             <div class="panel-body" id="ov-savings"></div>
           </div>
+        </div>
+
+        <div class="panel ov-panel" id="ov-journal-panel">
+          <div class="panel-header"><h3>Pendências abertas</h3><button class="btn btn-ghost btn-sm" data-goto="journal">Abrir diário de bordo</button></div>
+          <div class="panel-body" id="ov-journal"></div>
         </div>
 
         <div class="panel ov-panel">
@@ -493,6 +499,22 @@
             </ol>
           </div>
         </div>
+      </section>
+
+      <section class="tab-panel" id="tab-journal">
+        <div class="journal-toolbar">
+          <div class="filters" id="journal-filters">
+            <button class="filter-btn active" data-jstatus="abertas">Abertas</button>
+            <button class="filter-btn" data-jstatus="atrasadas">Atrasadas</button>
+            <button class="filter-btn" data-jstatus="concluida">Concluídas</button>
+            <button class="filter-btn" data-jstatus="">Tudo</button>
+          </div>
+          <div class="journal-actions">
+            <button class="btn btn-ghost" data-jnew="nota">+ Nota do dia</button>
+            <button class="btn btn-primary" data-jnew="pendencia">+ Nova pendência</button>
+          </div>
+        </div>
+        <div id="journal-list"></div>
       </section>
 
       <section class="tab-panel" id="tab-audit">

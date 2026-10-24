@@ -241,6 +241,7 @@ function switchTab(tab) {
     audit: "Auditoria",
     users: "Usuários e custos",
     assistant: "Assistente IA",
+    journal: "Diário de bordo",
     support: "Suporte",
   };
   document.getElementById("page-title").textContent = titles[tab] || tab;
@@ -250,6 +251,7 @@ function switchTab(tab) {
     loadAlertsConfig();
   }
   if (tab === "assistant") loadAssistantConfig().catch(() => {});
+  if (tab === "journal") loadJournal();
   if (tab === "support") loadSupportHealth();
   if (tab === "cluster" && state.selectedClusterId) {
     loadClusterPods().catch((error) => {
@@ -446,12 +448,22 @@ function renderOverview() {
   renderNodesUsage();
   renderRoadmap();
   renderNavCounts();
+  loadJournalSummary();
 }
 
 function renderNavCounts() {
   const pending = state.status?.gate?.counts?.pending ?? 0;
   const btn = document.querySelector('.nav-item[data-tab="recommendations"]');
   if (btn) btn.innerHTML = `Recomendações${pending ? ` <span class="nav-count">${pending}</span>` : ""}`;
+}
+
+const CHECK_LABELS = { NODE_METRICS: "Métricas de nodes", POD_METRICS: "Métricas de pods", PROMETHEUS: "Prometheus",
+  CONTAINER_METRICS: "Métricas de containers", HISTORY: "Histórico" };
+function checkLabel(type) {
+  const key = String(type || "").toUpperCase();
+  if (CHECK_LABELS[key]) return CHECK_LABELS[key];
+  const t = String(type || "").replace(/_/g, " ").toLowerCase();
+  return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 function renderOverviewStatus() {
@@ -473,7 +485,7 @@ function renderOverviewStatus() {
   const decision = report.decision;
   const items = checks.map((c) => `
     <span class="st-item" title="${escapeHtml(`${c.type}: cobertura ${c.coverage}% — ${c.status}`)}">
-      <i class="st-dot ${c.status === "OK" ? "ok" : "bad"}"></i>${escapeHtml(c.type.replace(/_/g, " "))} ${c.coverage}%</span>`);
+      <i class="st-dot ${c.status === "OK" ? "ok" : "bad"}"></i>${escapeHtml(checkLabel(c.type))} <b>${c.coverage}%</b></span>`);
   if (decision) {
     items.push(`
       <button class="st-item st-gate" id="ov-gate" title="Ver detalhes do gate de decisão">
@@ -491,7 +503,7 @@ function renderOverviewStatus() {
       <p style="margin-top:12px;font-size:12px;color:var(--text-muted)">Executáveis: ${decision.executable_recommendations ?? 0} ·
         Severidade HIGH: ${decision.high_severity_count ?? 0}</p>
       <h4 style="margin:14px 0 6px">Health checks</h4>
-      ${checks.map((c) => usageBar(`${c.type.replace(/_/g, " ")} — ${c.status}`, c.coverage)).join("")}`,
+      ${checks.map((c) => usageBar(`${checkLabel(c.type)} — ${c.status}`, c.coverage)).join("")}`,
       `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`);
   });
 }
@@ -536,6 +548,9 @@ function buildRecTable(items, compact = false) {
       }
       if (rec.status === "approved" && executable && can("admin")) {
         btns.push(`<button class="btn btn-primary btn-sm" data-action="execute" data-id="${rec.id}">Executar</button>`);
+      }
+      if (can("operador")) {
+        btns.push(`<button class="btn btn-ghost btn-sm btn-icon" title="Registrar no diário de bordo" data-action="journal" data-id="${rec.id}">＋</button>`);
       }
       actions = `<td><div class="actions-cell">${btns.join("")}</div></td>`;
     }
@@ -603,6 +618,9 @@ function renderRecommendations() {
       else if (action === "reject") showRejectModal(rec);
       else if (action === "execute") showExecuteModal(rec, false);
       else if (action === "dry-run") showExecuteModal(rec, true);
+      else if (action === "journal") showJournalForm("pendencia", {
+        title: `${REC_TYPE_LABELS[rec.type] || rec.type}: ${rec.pool || ""}`, body: rec.action,
+        link_type: "recommendation", link_ref: rec.id });
     });
   });
 
@@ -1363,13 +1381,17 @@ function renderExecutiveOverview() {
     return;
   }
   const tone = ov.score >= 85 ? "ok" : ov.score >= 60 ? "warn" : "bad";
-  const circ = 2 * Math.PI * 34;
+  const R = 52;
+  const circ = 2 * Math.PI * R;
   const created = state.status?.latest_report?.created_at;
   hero.innerHTML = `
     <div class="ov-ring ${tone}" title="${escapeHtml((ov.factors || []).map((f) => `${f.points} ${f.reason}`).join("\n") || "Sem descontos")}">
-      <svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="34" class="ring-bg"/><circle cx="40" cy="40" r="34" class="ring-fg"
-        stroke-dasharray="${circ}" stroke-dashoffset="${circ * (1 - ov.score / 100)}"/></svg>
-      <div class="ov-ring-label"><strong>${ov.score}</strong><span>/100</span></div>
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <circle cx="60" cy="60" r="${R}" class="ring-bg"/>
+        <circle cx="60" cy="60" r="${R}" class="ring-fg" transform="rotate(-90 60 60)"
+          stroke-dasharray="${circ}" stroke-dashoffset="${circ * (1 - ov.score / 100)}"/>
+      </svg>
+      <div class="ov-ring-label"><strong>${ov.score}</strong><span>de 100</span></div>
     </div>
     <div class="ov-hero-text">
       <span class="chip chip-${tone}">${escapeHtml(ov.status)}</span>
@@ -1403,7 +1425,7 @@ function renderExecutiveOverview() {
       <div class="ov-item">
         <span class="chip chip-${r.severity === "HIGH" ? "bad" : "warn"}">${r.severity === "HIGH" ? "CRÍTICO" : "ATENÇÃO"}</span>
         <div class="ov-item-text"><strong>${escapeHtml(r.title)}</strong><span>${escapeHtml(r.detail)}</span></div>
-        ${btn}
+        <div class="ov-item-actions">${btn}${can("operador") ? `<button class="btn btn-ghost btn-sm btn-icon" title="Registrar no diário de bordo" data-risk-journal="${i}">＋</button>` : ""}</div>
       </div>`;
   }).join("") : `<div class="ov-empty">✓ Nenhum risco ativo na última avaliação.</div>`;
 
@@ -1425,6 +1447,19 @@ document.getElementById("tab-overview").addEventListener("click", (event) => {
   if (goto) return switchTab(goto.dataset.riskGoto);
   const rec = event.target.closest("[data-goto-rec]");
   if (rec) return focusRecommendation(rec.dataset.gotoRec);
+  const jr = event.target.closest("[data-risk-journal]");
+  if (jr) {
+    const r = (state.status?.latest_report?.overview?.top_risks || [])[Number(jr.dataset.riskJournal)];
+    if (r) {
+      const node = r.key.startsWith("node-") ? r.key.split(":").slice(1).join(":") : null;
+      const recId = r.key.startsWith("rec:") ? r.key.slice(4) : null;
+      showJournalForm("pendencia", { title: r.title, body: r.detail,
+        link_type: node ? "node" : recId ? "recommendation" : "risk", link_ref: node || recId || r.key });
+    }
+    return;
+  }
+  const jopen = event.target.closest("[data-journal-open]");
+  if (jopen) { switchTab("journal"); return; }
   const ai = event.target.closest("[data-risk-ai]");
   if (ai) {
     const r = (state.status?.latest_report?.overview?.top_risks || [])[Number(ai.dataset.riskAi)];
@@ -1490,7 +1525,11 @@ async function showNodeDetail(name) {
   document.getElementById("modal-body").innerHTML = body;
   document.getElementById("modal-footer").innerHTML = `
     <button class="btn btn-ghost" onclick="closeModal()">Fechar</button>
+    ${can("operador") ? `<button class="btn btn-ghost" id="node-journal">Registrar pendência</button>` : ""}
     <button class="btn btn-primary" id="node-ask-ai">Analisar este node com o Assistente IA</button>`;
+  document.getElementById("node-journal")?.addEventListener("click", () => {
+    showJournalForm("pendencia", { title: `Node ${name}: `, link_type: "node", link_ref: name });
+  });
   document.getElementById("node-ask-ai").addEventListener("click", () => {
     closeModal();
     switchTab("assistant");
@@ -1898,3 +1937,184 @@ bootstrap();
 setInterval(() => {
   if (state.user) refresh().catch(() => {});
 }, 60000);
+
+// ── Diário de bordo ─────────────────────────────────────────
+const JOURNAL_STATUS = { aberta: "Aberta", andamento: "Em andamento", concluida: "Concluída" };
+state.journalFilter = "abertas";
+
+function fmtDay(iso) {
+  if (!iso) return "";
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function journalLink(e) {
+  if (!e.link_type || !e.link_ref) return "";
+  const label = { node: "Node", recommendation: "Recomendação", pod: "Pod", risk: "Risco" }[e.link_type] || e.link_type;
+  return `<button class="j-link" data-jlink-type="${escapeHtml(e.link_type)}" data-jlink-ref="${escapeHtml(e.link_ref)}">${label}: ${escapeHtml(e.link_ref)} ›</button>`;
+}
+
+function journalDue(e) {
+  if (!e.due_date) return "";
+  return `<span class="j-due ${e.overdue ? "late" : ""}">${e.overdue ? "Venceu em " : "Prazo "}${fmtDay(e.due_date)}</span>`;
+}
+
+async function loadJournalSummary() {
+  const el = document.getElementById("ov-journal");
+  if (!el || !state.selectedClusterId) return;
+  try {
+    const data = await API.get("/journal?status=abertas&kind=pendencia");
+    const s = data.summary || { open: 0, top: [] };
+    const nav = document.querySelector('.nav-item[data-tab="journal"]');
+    if (nav) nav.innerHTML = `Diário de bordo${s.open ? ` <span class="nav-count ${s.overdue ? "late" : ""}">${s.open}</span>` : ""}`;
+    el.innerHTML = s.top.length ? s.top.map((e) => `
+      <div class="ov-item">
+        <span class="chip chip-${e.overdue ? "bad" : e.status === "andamento" ? "info" : "warn"}">${e.overdue ? "ATRASADA" : JOURNAL_STATUS[e.status].toUpperCase()}</span>
+        <div class="ov-item-text"><strong>${escapeHtml(e.title)}</strong>
+          <span>${[e.assignee ? `Responsável: ${escapeHtml(e.assignee)}` : "", e.due_date ? `Prazo ${fmtDay(e.due_date)}` : ""].filter(Boolean).join(" · ") || "Sem responsável e sem prazo"}</span></div>
+        <button class="btn btn-ghost btn-sm" data-journal-open="1">Abrir</button>
+      </div>`).join("") + (s.open > 3 ? `<p class="ov-foot">+ ${s.open - 3} pendência(s) no diário de bordo.</p>` : "")
+      : `<div class="ov-empty">Nenhuma pendência aberta. Use o <strong>＋</strong> nos riscos, nodes ou recomendações para registrar.</div>`;
+  } catch (e) {
+    el.innerHTML = `<div class="ov-empty">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function loadJournal() {
+  const el = document.getElementById("journal-list");
+  if (!state.selectedClusterId) {
+    el.innerHTML = `<div class="empty-state"><p>Selecione um cluster para ver o diário de bordo</p></div>`;
+    return;
+  }
+  try {
+    const data = await API.get(`/journal?status=${encodeURIComponent(state.journalFilter)}`);
+    renderJournal(data.items || []);
+  } catch (e) {
+    el.innerHTML = `<div class="empty-state"><p>${escapeHtml(e.message)}</p></div>`;
+  }
+}
+
+function renderJournal(items) {
+  const el = document.getElementById("journal-list");
+  if (!items.length) {
+    el.innerHTML = `<div class="panel"><div class="panel-body"><div class="empty-state"><p>Nada por aqui. Registre pendências e notas do dia a dia do cluster.</p></div></div></div>`;
+    return;
+  }
+  const editor = can("operador");
+  el.innerHTML = `<div class="j-list">${items.map((e) => `
+    <article class="j-card ${e.kind} ${e.status} ${e.overdue ? "overdue" : ""}">
+      <div class="j-head">
+        <span class="chip ${e.kind === "nota" ? "chip-info" : e.overdue ? "chip-bad" : e.status === "concluida" ? "chip-ok" : e.status === "andamento" ? "chip-info" : "chip-warn"}">${e.kind === "nota" ? "NOTA" : e.overdue ? "ATRASADA" : JOURNAL_STATUS[e.status].toUpperCase()}</span>
+        <strong class="j-title">${escapeHtml(e.title)}</strong>
+        ${journalDue(e)}
+      </div>
+      ${e.body ? `<p class="j-body">${escapeHtml(e.body)}</p>` : ""}
+      <div class="j-foot">
+        <span>${escapeHtml(e.created_by)} · ${formatDate(e.created_at)}${e.assignee ? ` · Responsável: <b>${escapeHtml(e.assignee)}</b>` : ""}${e.closed_at && e.kind === "pendencia" ? ` · concluída ${formatDate(e.closed_at)}` : ""}</span>
+        ${journalLink(e)}
+        <span class="j-actions">
+          ${editor && e.kind === "pendencia" ? `<select class="j-status" data-jstatus-id="${e.id}">${Object.entries(JOURNAL_STATUS).map(([k, v]) => `<option value="${k}" ${k === e.status ? "selected" : ""}>${v}</option>`).join("")}</select>` : ""}
+          ${editor ? `<button class="btn btn-ghost btn-sm" data-jedit="${e.id}">Editar</button>` : ""}
+          ${can("admin") ? `<button class="btn btn-ghost btn-sm" data-jdel="${e.id}">Excluir</button>` : ""}
+        </span>
+      </div>
+    </article>`).join("")}</div>`;
+  state.journalItems = items;
+}
+
+function showJournalForm(kind, preset = {}, existing = null) {
+  const v = existing || preset;
+  const isTask = (existing?.kind || kind) === "pendencia";
+  openModal(existing ? "Editar registro" : isTask ? "Nova pendência" : "Nota do dia", `
+    <div class="form-group"><label>Título</label><input id="j-title" maxlength="200" value="${escapeHtml(v.title || "")}"></div>
+    <div class="form-group"><label>${isTask ? "Descrição" : "O que aconteceu / o que foi feito"}</label><textarea id="j-body" rows="5" maxlength="5000">${escapeHtml(v.body || "")}</textarea></div>
+    ${isTask ? `<div class="grid-2">
+      <div class="form-group"><label>Responsável</label><input id="j-assignee" maxlength="120" value="${escapeHtml(v.assignee || state.user?.full_name || "")}"></div>
+      <div class="form-group"><label>Prazo</label><input id="j-due" type="date" value="${escapeHtml(v.due_date || "")}"></div>
+    </div>` : ""}
+    ${v.link_type && v.link_ref ? `<p style="font-size:12px;color:var(--text-muted)">Vinculado a: ${escapeHtml(v.link_type)} ${escapeHtml(v.link_ref)}</p>` : ""}`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" id="j-save">Salvar</button>`);
+  setTimeout(() => document.getElementById("j-title")?.focus(), 30);
+  document.getElementById("j-save").addEventListener("click", async () => {
+    const body = {
+      title: document.getElementById("j-title").value.trim(),
+      body: document.getElementById("j-body").value.trim(),
+    };
+    if (isTask) {
+      body.assignee = document.getElementById("j-assignee").value.trim();
+      body.due_date = document.getElementById("j-due").value || "";
+    }
+    if (body.title.length < 2) return toast("Informe um título", "error");
+    try {
+      if (existing) await API.patch(`/journal/${existing.id}`, body);
+      else await API.post("/journal", { ...body, kind, due_date: body.due_date || null,
+        link_type: preset.link_type || null, link_ref: preset.link_ref || null });
+      closeModal();
+      toast(existing ? "Registro atualizado" : "Registrado no diário de bordo", "success");
+      loadJournalSummary();
+      if (state.currentTab === "journal") loadJournal();
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  });
+}
+
+document.getElementById("journal-filters").addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-jstatus]");
+  if (!btn) return;
+  document.querySelectorAll("#journal-filters .filter-btn").forEach((b) => b.classList.toggle("active", b === btn));
+  state.journalFilter = btn.dataset.jstatus;
+  loadJournal();
+});
+
+document.querySelector(".journal-actions").addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-jnew]");
+  if (!btn) return;
+  if (!can("operador")) return toast("Seu perfil é somente leitura", "error");
+  showJournalForm(btn.dataset.jnew, btn.dataset.jnew === "nota" ? { title: `Nota de ${new Date().toLocaleDateString("pt-BR")}` } : {});
+});
+
+document.getElementById("journal-list").addEventListener("click", async (event) => {
+  const link = event.target.closest("[data-jlink-type]");
+  if (link) {
+    const { jlinkType, jlinkRef } = link.dataset;
+    if (jlinkType === "node") showNodeDetail(jlinkRef);
+    else if (jlinkType === "recommendation") focusRecommendation(jlinkRef);
+    else switchTab("overview");
+    return;
+  }
+  const edit = event.target.closest("[data-jedit]");
+  if (edit) {
+    const entry = (state.journalItems || []).find((e) => e.id === edit.dataset.jedit);
+    if (entry) showJournalForm(entry.kind, {}, entry);
+    return;
+  }
+  const del = event.target.closest("[data-jdel]");
+  if (del) {
+    if (!del.dataset.armed) {
+      del.dataset.armed = "1";
+      del.textContent = "Confirmar exclusão";
+      del.classList.add("btn-danger");
+      setTimeout(() => { if (del.isConnected) { delete del.dataset.armed; del.textContent = "Excluir"; del.classList.remove("btn-danger"); } }, 4000);
+      return;
+    }
+    try {
+      await API.delete(`/journal/${del.dataset.jdel}`);
+      toast("Registro excluído", "success");
+      loadJournal();
+      loadJournalSummary();
+    } catch (e) { toast(e.message, "error"); }
+  }
+});
+
+document.getElementById("journal-list").addEventListener("change", async (event) => {
+  const sel = event.target.closest("[data-jstatus-id]");
+  if (!sel) return;
+  try {
+    await API.patch(`/journal/${sel.dataset.jstatusId}`, { status: sel.value });
+    toast(`Status: ${JOURNAL_STATUS[sel.value]}`, "success");
+    loadJournal();
+    loadJournalSummary();
+  } catch (e) { toast(e.message, "error"); }
+});

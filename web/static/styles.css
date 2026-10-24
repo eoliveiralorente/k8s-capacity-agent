@@ -1258,3 +1258,44 @@ body { font-family: var(--font); background: var(--bg); }
 tr.rec-focus td { background: rgba(47,111,237,.14); transition: background 1s; }
 tr.rec-focus td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
 @media (max-width: 900px) { .ov-strip { grid-template-columns: 1fr; } .ov-stat { border-right: none; border-bottom: 1px solid var(--border); } .st-gate { margin-left: 0; } }
+
+/* Anel da nota de saúde (v3) */
+.ov-ring { width: 128px; height: 128px; }
+.ov-ring svg { transform: none; }
+.ring-bg { stroke: #1A2230; stroke-width: 10; }
+.ring-fg { stroke-width: 10; }
+.ov-ring.ok .ring-fg { filter: drop-shadow(0 0 6px rgba(47,191,113,.35)); }
+.ov-ring.warn .ring-fg { filter: drop-shadow(0 0 6px rgba(240,162,59,.35)); }
+.ov-ring.bad .ring-fg { filter: drop-shadow(0 0 6px rgba(229,83,75,.35)); }
+.ov-ring-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; gap: 2px; }
+.ov-ring-label strong { font-size: 34px; line-height: 1; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.ov-ring-label span { font-size: 11px; color: var(--text-muted); margin: 0; letter-spacing: .02em; }
+.st-item b { color: var(--text); font-weight: 600; font-family: var(--mono); font-size: 12px; }
+.st-item { text-transform: none; }
+
+/* Diário de bordo */
+.chip-info { background: rgba(76,141,255,.14); color: #8DB4FF; }
+.nav-count.late { background: rgba(229,83,75,.16); color: #F2817B; }
+.ov-item-actions { display: flex; gap: 6px; align-items: center; }
+.btn-icon { padding: 4px 9px; font-size: 14px; line-height: 1; }
+.journal-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.journal-toolbar .filters { margin: 0; }
+.journal-actions { display: flex; gap: 8px; }
+.j-list { display: flex; flex-direction: column; gap: 10px; }
+.j-card { background: var(--bg-elevated); border: 1px solid var(--border); border-left: 3px solid #F0A23B; border-radius: var(--radius); padding: 14px 18px; }
+.j-card.nota { border-left-color: var(--use); }
+.j-card.pendencia.concluida { border-left-color: var(--success); opacity: .8; }
+.j-card.overdue { border-left-color: var(--danger); }
+.j-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.j-title { font-size: 14.5px; font-weight: 600; flex: 1; min-width: 200px; }
+.j-card.pendencia.concluida .j-title { text-decoration: line-through; text-decoration-color: #5D6B80; }
+.j-due { font-size: 12px; color: var(--text-muted); font-family: var(--mono); }
+.j-due.late { color: #F2817B; }
+.j-body { margin: 8px 0 0; color: #B8C2D0; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+.j-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: #5D6B80; }
+.j-foot b { color: var(--text-muted); font-weight: 600; }
+.j-link { background: none; border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; color: #8DB4FF; font: inherit; font-size: 12px; cursor: pointer; }
+.j-link:hover { border-color: var(--border-strong); }
+.j-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.j-status { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; font: inherit; font-size: 12px; }
+#modal-body textarea { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font: inherit; resize: vertical; }
