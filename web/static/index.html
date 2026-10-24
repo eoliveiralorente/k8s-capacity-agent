@@ -111,6 +111,7 @@
 
       <!-- OVERVIEW -->
       <section class="tab-panel active" id="tab-overview">
+        <div class="panel hidden" id="license-banner"><div class="panel-body" id="license-banner-text"></div></div>
         <div class="cards" id="overview-cards"></div>
         <div class="panel overview-connection" id="overview-connection"></div>
 
@@ -345,6 +346,19 @@
 
       <!-- AUDIT -->
       <section class="tab-panel" id="tab-users">
+        <div class="panel">
+          <div class="panel-header"><h3>Licença</h3></div>
+          <div class="panel-body">
+            <div id="license-info"></div>
+            <form id="license-form" class="cluster-form">
+              <div class="form-group">
+                <label for="license-file">Instalar licença (arquivo .license.json recebido do fornecedor)</label>
+                <input id="license-file" type="file" accept=".json,application/json" required>
+              </div>
+              <button class="btn btn-primary" type="submit">Instalar licença</button>
+            </form>
+          </div>
+        </div>
         <div class="panel">
           <div class="panel-header"><h3>Convidar colega</h3></div>
           <div class="panel-body">

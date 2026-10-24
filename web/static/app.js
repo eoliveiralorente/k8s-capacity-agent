@@ -464,6 +464,7 @@ function renderOverview() {
     </div>
   `;
   renderConnectionSummary();
+  loadLicense();
   renderNodesUsage();
   renderRoadmap();
 
@@ -1354,6 +1355,52 @@ async function renderRoadmap() {
       <span style="color:var(--text-muted);font-size:12px">${escapeHtml(i.detalhe)}</span></li>`).join("")}
     </ul>`;
 }
+
+// ── Licença ─────────────────────────────────────────────────
+
+const PLAN_LABELS = { community: "Community", pro: "Pro", enterprise: "Enterprise" };
+
+async function loadLicense() {
+  try {
+    state.license = await API.get("/license");
+  } catch (e) {
+    return;
+  }
+  const lic = state.license;
+  const banner = document.getElementById("license-banner");
+  const warn = ["community", "grace", "expired", "invalid"].includes(lic.state) || (lic.days_left !== null && lic.days_left <= 30);
+  banner.classList.toggle("hidden", !warn || !can("admin"));
+  document.getElementById("license-banner-text").innerHTML =
+    `<strong>Licença ${escapeHtml(PLAN_LABELS[lic.plan] || lic.plan)}:</strong> ${escapeHtml(lic.message)}`;
+  const features = (lic.features || []).map((f) => escapeHtml(lic.feature_labels?.[f] || f)).join(", ") || "—";
+  const info = document.getElementById("license-info");
+  if (info) {
+    info.innerHTML = `
+      <dl class="rec-detail">
+        <dt>Plano</dt><dd>${escapeHtml(PLAN_LABELS[lic.plan] || lic.plan)} (${escapeHtml(lic.state)})</dd>
+        <dt>Cliente</dt><dd>${escapeHtml(lic.customer || "—")}</dd>
+        <dt>Limites</dt><dd>${lic.max_clusters} cluster(s), ${lic.max_users} usuário(s)</dd>
+        <dt>Recursos</dt><dd>${features}</dd>
+        <dt>Validade</dt><dd>${lic.expires_at ? formatDate(lic.expires_at) : "—"}</dd>
+        <dt>Situação</dt><dd>${escapeHtml(lic.message)}</dd>
+      </dl>`;
+  }
+}
+
+document.getElementById("license-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const file = document.getElementById("license-file").files[0];
+  if (!file) return;
+  try {
+    await API.post("/license", { license: await file.text() });
+    toast("Licença instalada", "success");
+    form.reset();
+    await loadLicense();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+});
 
 // ── Usuários e convites ─────────────────────────────────────
 

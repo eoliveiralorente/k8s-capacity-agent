@@ -73,7 +73,16 @@ from tenant_context import (
     current_user,
 )
 
+from licensing.core import LicenseError, check_limit, has_feature, license_status, require_feature, save_license_text
+
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+def _license_guard(fn, *args):
+    try:
+        fn(*args)
+    except LicenseError as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
 
 
 class ApproveRequest(BaseModel):
@@ -199,6 +208,31 @@ def healthz():
             "sampler_minutes": sampler.SAMPLE_MINUTES}
 
 
+class LicenseUpload(BaseModel):
+    license: str = Field(min_length=20, max_length=20_000)
+
+
+@app.get("/api/license")
+def api_license():
+    status = license_status()
+    status["feature_labels"] = {
+        "execution": "Aprovação e execução", "agent_mode": "Modo agente",
+        "alerts": "Alertas", "ai_assistant": "Assistente de IA",
+    }
+    return status
+
+
+@app.post("/api/license")
+def api_upload_license(body: LicenseUpload):
+    try:
+        payload = save_license_text(body.license.strip())
+    except LicenseError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    append_audit("license_installed", {"license_id": payload["license_id"], "plan": payload["plan"],
+                                       "customer": payload["customer"], "by": _actor()})
+    return license_status()
+
+
 @app.get("/api/auth/setup")
 def api_auth_setup():
     """Informa à tela de login se o cadastro inicial ainda está aberto."""
@@ -291,6 +325,7 @@ def api_users():
 @app.post("/api/invites")
 def api_create_invite(body: InviteRequest, request: Request):
     user = current_user.get()
+    _license_guard(check_limit, "users", len(list_users(user["tenant_id"])) + len(list_invites(user["tenant_id"])))
     try:
         token, expires_at = create_invite(user["tenant_id"], body.role, _actor(), body.email)
     except InviteError as exc:
@@ -360,6 +395,7 @@ def api_clusters():
 @app.post("/api/clusters")
 def api_add_cluster(body: ClusterRequest):
     user = current_user.get()
+    _license_guard(check_limit, "clusters", len(list_clusters(user["tenant_id"])))
     kubeconfig = body.kubeconfig.encode("utf-8")
     try:
         profile = inspect_kubeconfig(kubeconfig)
@@ -397,6 +433,8 @@ def _collector_instructions(request, token):
 @app.post("/api/clusters/agent")
 def api_add_agent_cluster(body: AgentClusterRequest, request: Request):
     user = current_user.get()
+    _license_guard(require_feature, "agent_mode")
+    _license_guard(check_limit, "clusters", len(list_clusters(user["tenant_id"])))
     try:
         cluster, token = create_agent_cluster(user["tenant_id"], body.name)
     except DuplicateClusterError as exc:
@@ -437,6 +475,8 @@ async def api_ingest(request: Request):
     cluster = find_cluster_by_ingest_token(token)
     if not cluster:
         raise HTTPException(status_code=401, detail="Token de ingestão inválido ou revogado")
+    if not has_feature("agent_mode"):
+        raise HTTPException(status_code=402, detail="Licença do painel não inclui o modo agente")
 
     if cluster.get("last_seen_at"):
         elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(cluster["last_seen_at"])).total_seconds()
@@ -705,6 +745,7 @@ def api_evaluate():
 
 @app.post("/api/recommendations/{rec_id}/approve")
 def api_approve(rec_id: str, body: ApproveRequest):
+    _license_guard(require_feature, "execution")
 
     result = approve(rec_id, _actor())
 
@@ -727,6 +768,7 @@ def api_reject(rec_id: str, body: RejectRequest):
 
 @app.post("/api/recommendations/{rec_id}/execute")
 def api_execute(rec_id: str, body: ExecuteRequest):
+    _license_guard(require_feature, "execution")
 
     if not body.dry_run and (current_user.get() or {}).get("role") != "admin":
         raise HTTPException(status_code=403, detail="Execução real requer papel 'admin'")

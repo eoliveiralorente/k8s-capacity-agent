@@ -20,6 +20,7 @@ POLICY = [
     ("GET", r"/api/cluster/pod-logs", "operador"),  # logs podem conter dados sensíveis
     ("POST", r"/api/clusters/agent", "admin"),
     ("POST", r"/api/clusters/[^/]+/rotate-token", "admin"),
+    ("POST", r"/api/license", "admin"),
     ("GET", r"/api/users", "admin"),
     ("POST", r"/api/invites", "admin"),
     ("PATCH", r"/api/users/[^/]+", "admin"),

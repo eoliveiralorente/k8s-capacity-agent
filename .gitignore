@@ -24,3 +24,6 @@ kubeconfig*
 /docs/cenario-ambiente-cluster-*.*
 /docs/meu-relatorio.html
 /docs/proposta-gestao-infraestrutura-gke.*
+
+# Chave PÚBLICA de licença vai na imagem; a privada fica fora do repositório
+!licensing/public_key.pem
