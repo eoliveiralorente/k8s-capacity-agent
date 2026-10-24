@@ -440,134 +440,73 @@ function showExecuteModal(rec, dryRun = false) {
 // ── Render ──────────────────────────────────────────────────
 
 function renderOverview() {
-  const report = state.status?.latest_report;
-  const gate = state.status?.gate || {};
-  const counts = gate.counts || {};
-  const summary = report?.summary || {};
-
-  document.getElementById("overview-cards").innerHTML = `
-    <div class="card">
-      <div class="card-label">Nodes</div>
-      <div class="card-value">${summary.nodes ?? "—"}</div>
-      <div class="card-sub" title="Pools com nodes registrados no cluster (API Kubernetes)">${summary.node_pools ?? 0} node pools ativos no cluster</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Pods</div>
-      <div class="card-value">${summary.pods ?? "—"}</div>
-      <div class="card-sub">${summary.pending_pods ?? 0} pending</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Pendentes</div>
-      <div class="card-value warn">${counts.pending ?? 0}</div>
-      <div class="card-sub">aguardando aprovação</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Aprovadas</div>
-      <div class="card-value ok">${counts.approved ?? 0}</div>
-      <div class="card-sub">prontas para execução</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Problemas</div>
-      <div class="card-value ${summary.scheduling_issues > 0 ? "bad" : "ok"}">
-        ${summary.scheduling_issues ?? 0}
-      </div>
-      <div class="card-sub">scheduling issues</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Recomendações</div>
-      <div class="card-value">${summary.recommendations_count ?? 0}</div>
-      <div class="card-sub">última avaliação</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Economia potencial</div>
-      <div class="card-value ok">${summary.cost_settings && (summary.cost_settings.cpu_month || summary.cost_settings.gb_month)
-        ? formatBRL(summary.estimated_savings_monthly || 0) : "—"}</div>
-      <div class="card-sub">${summary.cost_settings && (summary.cost_settings.cpu_month || summary.cost_settings.gb_month)
-        ? "por mês, recomendações abertas" : "configure custos em Usuários"}</div>
-    </div>
-  `;
-  renderConnectionSummary();
   loadLicense();
   renderExecutiveOverview();
+  renderOverviewStatus();
   renderNodesUsage();
   renderRoadmap();
-
-  const health = report?.health;
-  if (health) {
-    document.getElementById("health-checks").innerHTML = (health.checks || []).map((c) => `
-      <div class="metric-bar">
-        <div class="metric-bar-header">
-          <span>${c.type.replace("_", " ")}</span>
-          <span class="${c.status === "OK" ? "decision-ok" : "decision-blocked"}">
-            ${c.coverage}% — ${c.status}
-          </span>
-        </div>
-        <div class="metric-bar-track">
-          <div class="metric-bar-fill ${c.status === "OK" ? "ok" : "bad"}" style="width:${Math.min(c.coverage, 100)}%"></div>
-        </div>
-      </div>
-    `).join("");
-  } else {
-    document.getElementById("health-checks").innerHTML =
-      `<div class="empty-state"><p>Execute uma avaliação para ver health checks</p></div>`;
-  }
-
-  const decision = report?.decision;
-  if (decision) {
-    const reasons = (decision.reasons || []).map((r) => `<li>${r}</li>`).join("");
-    document.getElementById("decision-panel").innerHTML = `
-      <p class="${decision.allowed ? "decision-ok" : "decision-blocked"}" style="font-weight:600">
-        ${decision.allowed ? "✓ Decisão permitida" : "✗ Decisão bloqueada"}
-      </p>
-      ${reasons ? `<ul class="reason-list">${reasons}</ul>` : ""}
-      <p style="margin-top:12px;font-size:12px;color:var(--text-muted)">
-        Executáveis: ${decision.executable_recommendations ?? 0} |
-        HIGH severity: ${decision.high_severity_count ?? 0}
-      </p>
-    `;
-  } else {
-    document.getElementById("decision-panel").innerHTML =
-      `<div class="empty-state"><p>Sem dados de decisão</p></div>`;
-  }
-
-  const pending = state.recommendations.filter((r) => r.status === "pending").slice(0, 5);
-  if (pending.length) {
-    document.getElementById("pending-preview").innerHTML = buildRecTable(pending, true);
-  } else {
-    document.getElementById("pending-preview").innerHTML =
-      `<div class="empty-state"><p>Nenhuma recomendação pendente</p></div>`;
-  }
+  renderNavCounts();
 }
 
-function renderConnectionSummary() {
-  const element = document.getElementById("overview-connection");
-  const active = state.clusters.find((cluster) => cluster.id === state.selectedClusterId);
-  if (!active) {
-    element.innerHTML = `
-      <div class="connection-summary-copy">
-        <span class="connection-summary-label">Conexão ativa</span>
-        <strong>Nenhum cluster selecionado</strong>
-      </div>
-      <button class="btn btn-ghost btn-sm" data-goto="cluster">Cadastrar conexão</button>
-    `;
-    element.querySelector("[data-goto]").addEventListener("click", () => switchTab("cluster"));
-    return;
-  }
+function renderNavCounts() {
+  const pending = state.status?.gate?.counts?.pending ?? 0;
+  const btn = document.querySelector('.nav-item[data-tab="recommendations"]');
+  if (btn) btn.innerHTML = `Recomendações${pending ? ` <span class="nav-count">${pending}</span>` : ""}`;
+}
 
-  const nodes = state.cluster?.nodes || [];
-  const ready = nodes.filter((node) => node.status === "Ready").length;
-  const connectionStatus = state.clusterError
-    ? "Falha na conexão"
-    : nodes.length ? `${ready}/${nodes.length} nodes Ready` : "Conectando...";
-  element.innerHTML = `
-    <div class="connection-summary-copy">
-      <span class="connection-summary-label">Conexão ativa</span>
-      <strong>${escapeHtml(active.name)}</strong>
-      <span>${escapeHtml(active.context_name)} · ${escapeHtml(connectionStatus)}</span>
-    </div>
-    <button class="btn btn-ghost btn-sm" data-goto="cluster">Gerenciar conexões</button>
-  `;
-  element.querySelector("[data-goto]").addEventListener("click", () => switchTab("cluster"));
+function renderOverviewStatus() {
+  const report = state.status?.latest_report;
+  const summary = report?.summary || {};
+  const nodes = report?.nodes_usage || [];
+  const ready = nodes.filter((n) => n.ready).length;
+  const strip = document.getElementById("ov-strip");
+  const statusEl = document.getElementById("ov-status");
+  if (!report) { strip.innerHTML = ""; statusEl.innerHTML = ""; return; }
+
+  const problems = summary.scheduling_issues ?? 0;
+  strip.innerHTML = `
+    <button class="ov-stat" data-risk-goto="capacity"><span>Nodes</span><strong>${ready}/${nodes.length || summary.nodes || 0}</strong><em>Ready · ${summary.node_pools ?? 0} pools</em></button>
+    <button class="ov-stat" data-risk-goto="scheduling"><span>Pods</span><strong>${summary.pods ?? "—"}</strong><em>${summary.pending_pods ? `${summary.pending_pods} Pending` : "nenhum Pending"}</em></button>
+    <button class="ov-stat ${problems ? "warn" : ""}" data-risk-goto="scheduling"><span>Problemas</span><strong>${problems}</strong><em>de scheduling</em></button>`;
+
+  const checks = report.health?.checks || [];
+  const decision = report.decision;
+  const items = checks.map((c) => `
+    <span class="st-item" title="${escapeHtml(`${c.type}: cobertura ${c.coverage}% — ${c.status}`)}">
+      <i class="st-dot ${c.status === "OK" ? "ok" : "bad"}"></i>${escapeHtml(c.type.replace(/_/g, " "))} ${c.coverage}%</span>`);
+  if (decision) {
+    items.push(`
+      <button class="st-item st-gate" id="ov-gate" title="Ver detalhes do gate de decisão">
+        <i class="st-dot ${decision.allowed ? "ok" : "bad"}"></i>Gate: ${decision.allowed ? "decisões liberadas" : "decisões bloqueadas"}
+        · ${decision.executable_recommendations ?? 0} executáveis ›</button>`);
+  }
+  statusEl.innerHTML = items.length ? `<span class="st-label">Status da coleta</span>${items.join("")}` : "";
+  const gate = document.getElementById("ov-gate");
+  if (gate) gate.addEventListener("click", () => {
+    const reasons = (decision.reasons || []).map((r) => `<li>${escapeHtml(r)}</li>`).join("");
+    openModal("Gate de decisão", `
+      <p class="${decision.allowed ? "decision-ok" : "decision-blocked"}" style="font-weight:600">
+        ${decision.allowed ? "✓ Decisões permitidas" : "✗ Decisões bloqueadas"}</p>
+      ${reasons ? `<ul class="reason-list">${reasons}</ul>` : "<p>Nenhum bloqueio: os dados estão completos e estáveis para aprovar mudanças.</p>"}
+      <p style="margin-top:12px;font-size:12px;color:var(--text-muted)">Executáveis: ${decision.executable_recommendations ?? 0} ·
+        Severidade HIGH: ${decision.high_severity_count ?? 0}</p>
+      <h4 style="margin:14px 0 6px">Health checks</h4>
+      ${checks.map((c) => usageBar(`${c.type.replace(/_/g, " ")} — ${c.status}`, c.coverage)).join("")}`,
+      `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`);
+  });
+}
+
+function focusRecommendation(id) {
+  state.focusRecId = id;
+  if (state.filterStatus) {
+    state.filterStatus = "";
+    document.querySelectorAll(".filter-btn").forEach((b) => b.classList.toggle("active", b.dataset.status === ""));
+    switchTab("recommendations");
+    loadRecommendations().then(renderRecommendations).catch(() => {});
+  } else {
+    switchTab("recommendations");
+    renderRecommendations();
+  }
 }
 
 function buildRecTable(items, compact = false) {
@@ -602,7 +541,7 @@ function buildRecTable(items, compact = false) {
     }
 
     return `
-      <tr>
+      <tr id="rec-row-${rec.id}" class="${state.focusRecId === rec.id ? "rec-focus" : ""}">
         <td>${statusBadge(rec.status)}</td>
         <td>${severityBadge(rec.severity)}</td>
         <td class="mono">${rec.id}</td>
@@ -666,6 +605,15 @@ function renderRecommendations() {
       else if (action === "dry-run") showExecuteModal(rec, true);
     });
   });
+
+  if (state.focusRecId) {
+    const row = document.getElementById(`rec-row-${state.focusRecId}`);
+    if (row) {
+      row.closest("details")?.setAttribute("open", "");
+      setTimeout(() => row.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+    }
+    setTimeout(() => { state.focusRecId = null; row?.classList.remove("rec-focus"); }, 4000);
+  }
 }
 
 function renderCapacity() {
@@ -1448,7 +1396,7 @@ function renderExecutiveOverview() {
     let btn = "";
     if (r.key.startsWith("node-")) btn = `<button class="btn btn-ghost btn-sm" data-risk-node="${escapeHtml(r.key.split(":").slice(1).join(":"))}">Ver node</button>`;
     else if (r.key.startsWith("pod:")) btn = `<button class="btn btn-ghost btn-sm" data-risk-ai="${i}">Diagnosticar com IA</button>`;
-    else if (r.key.startsWith("rec:")) btn = `<button class="btn btn-ghost btn-sm" data-risk-goto="recommendations">Ver recomendação</button>`;
+    else if (r.key.startsWith("rec:")) btn = `<button class="btn btn-ghost btn-sm" data-goto-rec="${escapeHtml(r.key.slice(4))}">Ver recomendação</button>`;
     else if (r.key === "agent-stale") btn = `<button class="btn btn-ghost btn-sm" data-risk-goto="cluster">Ver conexão</button>`;
     else btn = `<button class="btn btn-ghost btn-sm" data-risk-goto="scheduling">Ver scheduling</button>`;
     return `
@@ -1476,7 +1424,7 @@ document.getElementById("tab-overview").addEventListener("click", (event) => {
   const goto = event.target.closest("[data-risk-goto]");
   if (goto) return switchTab(goto.dataset.riskGoto);
   const rec = event.target.closest("[data-goto-rec]");
-  if (rec) return switchTab("recommendations");
+  if (rec) return focusRecommendation(rec.dataset.gotoRec);
   const ai = event.target.closest("[data-risk-ai]");
   if (ai) {
     const r = (state.status?.latest_report?.overview?.top_risks || [])[Number(ai.dataset.riskAi)];

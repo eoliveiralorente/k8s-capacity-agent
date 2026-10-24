@@ -118,7 +118,11 @@
       <section class="tab-panel active" id="tab-overview">
         <div class="panel hidden" id="license-banner"><div class="panel-body" id="license-banner-text"></div></div>
 
-        <div class="ov-hero" id="ov-hero"></div>
+        <div class="ov-hero-wrap">
+          <div class="ov-hero" id="ov-hero"></div>
+          <div class="ov-strip" id="ov-strip"></div>
+        </div>
+        <div class="ov-status" id="ov-status"></div>
         <div class="ov-kpis" id="ov-kpis"></div>
 
         <div class="ov-cols">
@@ -145,25 +149,6 @@
           <div class="panel-body" id="roadmap-list"></div>
         </div>
 
-        <details class="ov-details">
-          <summary>Detalhes técnicos</summary>
-          <div class="panel overview-connection" id="overview-connection"></div>
-          <div class="cards" id="overview-cards"></div>
-          <div class="grid-2">
-            <div class="panel">
-              <div class="panel-header"><h3>Health Checks</h3></div>
-              <div class="panel-body" id="health-checks"></div>
-            </div>
-            <div class="panel">
-              <div class="panel-header"><h3>Gate de Decisão</h3></div>
-              <div class="panel-body" id="decision-panel"></div>
-            </div>
-          </div>
-          <div class="panel">
-            <div class="panel-header"><h3>Recomendações Pendentes</h3></div>
-            <div class="panel-body" id="pending-preview"></div>
-          </div>
-        </details>
       </section>
 
       <section class="tab-panel" id="tab-cluster">
