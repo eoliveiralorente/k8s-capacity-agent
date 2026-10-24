@@ -78,6 +78,23 @@ def initialize_database():
                 used_at TEXT
             );
             CREATE INDEX IF NOT EXISTS invites_tenant_idx ON invites(tenant_id);
+            CREATE TABLE IF NOT EXISTS assistant_settings (
+                tenant_id TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                base_url TEXT,
+                api_version TEXT,
+                auth_header TEXT,
+                api_key_ciphertext BLOB,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS assistant_usage (
+                tenant_id TEXT NOT NULL,
+                day TEXT NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (tenant_id, day)
+            );
             """
         )
         # Migração RBAC: contas existentes viram admin.
@@ -604,3 +621,60 @@ def delete_user(tenant_id, user_id):
             raise LastAdminError("A empresa precisa manter pelo menos um admin")
         connection.execute("DELETE FROM users WHERE id = ? AND tenant_id = ?", (user_id, tenant_id))
     return True
+
+
+
+# ── Assistente de IA (configuração por empresa) ───────────────
+
+def get_assistant_config(tenant_id, include_key=False):
+    initialize_database()
+    with _connect() as connection:
+        row = connection.execute("SELECT * FROM assistant_settings WHERE tenant_id = ?", (tenant_id,)).fetchone()
+    if not row:
+        return None
+    config = {k: row[k] for k in ("provider", "model", "base_url", "api_version", "auth_header", "updated_at")}
+    config["enabled"] = bool(row["enabled"])
+    config["has_key"] = bool(row["api_key_ciphertext"])
+    if include_key and row["api_key_ciphertext"]:
+        fernet, invalid = _fernet()
+        try:
+            config["api_key"] = fernet.decrypt(row["api_key_ciphertext"]).decode("utf-8")
+        except invalid as exc:
+            raise RuntimeError("Não foi possível descriptografar a chave do assistente") from exc
+    return config
+
+
+def save_assistant_config(tenant_id, provider, model, base_url=None, api_version=None,
+                          auth_header=None, api_key=None, enabled=True):
+    """api_key=None mantém a chave atual; api_key="" remove."""
+    initialize_database()
+    fernet, _ = _fernet()
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as connection:
+        current = connection.execute(
+            "SELECT api_key_ciphertext FROM assistant_settings WHERE tenant_id = ?", (tenant_id,)
+        ).fetchone()
+        if api_key is None:
+            ciphertext = current["api_key_ciphertext"] if current else None
+        else:
+            ciphertext = fernet.encrypt(api_key.encode("utf-8")) if api_key else None
+        connection.execute(
+            "INSERT OR REPLACE INTO assistant_settings(tenant_id, provider, model, base_url, api_version, "
+            "auth_header, api_key_ciphertext, enabled, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (tenant_id, provider, model, base_url or None, api_version or None, auth_header or None,
+             ciphertext, int(bool(enabled)), now),
+        )
+
+
+def increment_assistant_usage(tenant_id):
+    initialize_database()
+    day = datetime.now(timezone.utc).date().isoformat()
+    with _connect() as connection:
+        connection.execute(
+            "INSERT INTO assistant_usage(tenant_id, day, count) VALUES (?, ?, 1) "
+            "ON CONFLICT(tenant_id, day) DO UPDATE SET count = count + 1",
+            (tenant_id, day),
+        )
+        return connection.execute(
+            "SELECT count FROM assistant_usage WHERE tenant_id = ? AND day = ?", (tenant_id, day)
+        ).fetchone()[0]

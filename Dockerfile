@@ -42,6 +42,7 @@ COPY executors/ ./executors/
 COPY reporters/ ./reporters/
 COPY web/ ./web/
 COPY licensing/ ./licensing/
+COPY assistant/ ./assistant/
 
 RUN chmod -R a+rX /app \
     && mkdir -p /data \

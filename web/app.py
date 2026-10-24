@@ -24,6 +24,9 @@ from accounts.store import (
     set_user_role,
     count_tenants,
     create_agent_cluster,
+    get_assistant_config,
+    increment_assistant_usage,
+    save_assistant_config,
     ensure_incluster_cluster,
     create_cluster,
     find_cluster_by_ingest_token,
@@ -206,6 +209,69 @@ def healthz():
 
     return {"status": "ok", "single_tenant": SINGLE_TENANT, "incluster": INCLUSTER,
             "sampler_minutes": sampler.SAMPLE_MINUTES}
+
+
+class AssistantConfigRequest(BaseModel):
+    provider: str = Field(pattern="^(anthropic|openai)$")
+    model: str = Field(min_length=2, max_length=120)
+    base_url: str | None = Field(default=None, max_length=300)
+    api_version: str | None = Field(default=None, max_length=40)
+    auth_header: str | None = Field(default=None, pattern="^(bearer|api-key)$")
+    api_key: str | None = Field(default=None, max_length=500)
+    enabled: bool = True
+
+
+class ChatMessage(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=8000)
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage] = Field(min_length=1, max_length=20)
+
+
+AI_DAILY_LIMIT = int(os.getenv("CAPACITY_AGENT_AI_DAILY_LIMIT", "200"))
+
+
+@app.get("/api/assistant/config")
+def api_assistant_config():
+    user = current_user.get()
+    return {"config": get_assistant_config(user["tenant_id"]),
+            "licensed": has_feature("ai_assistant"), "daily_limit": AI_DAILY_LIMIT}
+
+
+@app.put("/api/assistant/config")
+def api_save_assistant_config(body: AssistantConfigRequest):
+    user = current_user.get()
+    if body.base_url and not re.fullmatch(r"https?://[^\s]+", body.base_url):
+        raise HTTPException(status_code=422, detail="base_url inválida")
+    save_assistant_config(user["tenant_id"], body.provider, body.model, body.base_url,
+                          body.api_version, body.auth_header, body.api_key, body.enabled)
+    append_audit("assistant_config", {"provider": body.provider, "model": body.model,
+                                      "key_changed": body.api_key is not None, "by": _actor()})
+    return {"success": True, "config": get_assistant_config(user["tenant_id"])}
+
+
+@app.post("/api/assistant/chat")
+def api_assistant_chat(body: ChatRequest):
+    from assistant.engine import AssistantError, ask
+
+    _license_guard(require_feature, "ai_assistant")
+    user = current_user.get()
+    config = get_assistant_config(user["tenant_id"], include_key=True)
+    if not config or not config.get("enabled"):
+        raise HTTPException(status_code=409, detail="Assistente não configurado. Um admin deve configurar o provedor de IA.")
+    if not current_cluster_id.get():
+        raise HTTPException(status_code=409, detail="Selecione um cluster")
+    if increment_assistant_usage(user["tenant_id"]) > AI_DAILY_LIMIT:
+        raise HTTPException(status_code=429, detail=f"Limite diário de {AI_DAILY_LIMIT} perguntas atingido")
+    try:
+        answer, tools_used = ask(config, [m.model_dump() for m in body.messages], {"role": user.get("role")})
+    except AssistantError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    append_audit("assistant_query", {"question": body.messages[-1].content[:200],
+                                     "tools": tools_used, "by": _actor()})
+    return {"answer": answer, "tools_used": tools_used}
 
 
 class LicenseUpload(BaseModel):

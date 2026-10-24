@@ -71,6 +71,7 @@
         <button class="nav-item" data-tab="recommendations">Recomendações</button>
         <button class="nav-item" data-tab="capacity">Capacity</button>
         <button class="nav-item" data-tab="scheduling">Scheduling</button>
+        <button class="nav-item" data-tab="assistant">Assistente IA</button>
         <button class="nav-item" data-tab="audit">Auditoria</button>
         <button class="nav-item hidden" data-tab="users" id="nav-users">Usuários</button>
         <a class="nav-item nav-link" href="/relatorio" target="_blank">Relatório Gerencial ↗</a>
@@ -383,6 +384,55 @@
         <div class="panel">
           <div class="panel-header"><h3>Usuários da empresa</h3></div>
           <div class="panel-body" id="users-list"></div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="tab-assistant">
+        <div class="panel">
+          <div class="panel-header"><h3>Assistente de SRE</h3></div>
+          <div class="panel-body">
+            <p style="color:var(--text-muted);font-size:12px">Somente leitura: consulta os dados do cluster ativo, mascara informações sensíveis e nunca altera o cluster.</p>
+            <div id="chat-log" style="max-height:480px;overflow:auto;margin-bottom:12px"></div>
+            <form id="chat-form" class="cluster-form">
+              <div class="form-group">
+                <label for="chat-input">Pergunta</label>
+                <textarea id="chat-input" rows="3" maxlength="4000" placeholder="Ex.: Por que o pod X está reiniciando? Qual node corre mais risco hoje?"></textarea>
+              </div>
+              <div class="cluster-form-actions">
+                <span class="form-hint" id="chat-status"></span>
+                <button class="btn btn-ghost" type="button" id="chat-clear">Nova conversa</button>
+                <button class="btn btn-primary" type="submit" id="chat-send">Perguntar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+        <div class="panel hidden" id="assistant-config-panel">
+          <div class="panel-header"><h3>Configuração do provedor de IA (admin)</h3></div>
+          <div class="panel-body">
+            <form id="assistant-config-form" class="cluster-form">
+              <div class="form-group">
+                <label for="ai-provider">Provedor</label>
+                <select id="ai-provider" name="provider">
+                  <option value="anthropic">Anthropic (Claude)</option>
+                  <option value="openai">Compatível com OpenAI (OpenAI, Azure OpenAI, Ollama local)</option>
+                </select>
+              </div>
+              <div class="form-group"><label for="ai-model">Modelo</label>
+                <input id="ai-model" name="model" maxlength="120" placeholder="ex.: claude-sonnet-5-5 · gpt-4o · llama3.1" required></div>
+              <div class="form-group"><label for="ai-base-url">URL base (opcional)</label>
+                <input id="ai-base-url" name="base_url" maxlength="300" placeholder="Ollama: http://ollama:11434/v1 · Azure: https://<recurso>.openai.azure.com/openai/deployments/<deploy>"></div>
+              <div class="form-group"><label for="ai-api-version">api-version (somente Azure)</label>
+                <input id="ai-api-version" name="api_version" maxlength="40"></div>
+              <div class="form-group"><label for="ai-auth-header">Cabeçalho de autenticação</label>
+                <select id="ai-auth-header" name="auth_header"><option value="bearer">Authorization: Bearer</option><option value="api-key">api-key (Azure)</option></select></div>
+              <div class="form-group"><label for="ai-api-key">Chave de API (deixe vazio para manter a atual)</label>
+                <input id="ai-api-key" name="api_key" type="password" maxlength="500" autocomplete="off"></div>
+              <div class="cluster-form-actions">
+                <span class="form-hint" id="ai-config-status"></span>
+                <button class="btn btn-primary" type="submit">Salvar configuração</button>
+              </div>
+            </form>
+          </div>
         </div>
       </section>
 

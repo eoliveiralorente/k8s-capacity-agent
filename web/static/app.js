@@ -238,9 +238,11 @@ function switchTab(tab) {
     scheduling: "Scheduling",
     audit: "Auditoria",
     users: "Usuários",
+    assistant: "Assistente IA",
   };
   document.getElementById("page-title").textContent = titles[tab] || tab;
   if (tab === "users" && can("admin")) loadUsers().catch((e) => toast(e.message, "error"));
+  if (tab === "assistant") loadAssistantConfig().catch(() => {});
   if (tab === "cluster" && state.selectedClusterId) {
     loadClusterPods().catch((error) => {
       state.podError = error.message;
@@ -1400,6 +1402,90 @@ document.getElementById("license-form").addEventListener("submit", async (event)
   } catch (e) {
     toast(e.message, "error");
   }
+});
+
+// ── Assistente de IA ────────────────────────────────────────
+
+const chatHistory = [];
+
+function renderChat() {
+  const log = document.getElementById("chat-log");
+  log.innerHTML = chatHistory.map((m) => `
+    <div style="margin:8px 0;padding:10px 12px;border-radius:8px;background:${m.role === "user" ? "var(--bg-elevated, rgba(59,130,246,.12))" : "rgba(255,255,255,.04)"}">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">${m.role === "user" ? "Você" : "Assistente"}${m.tools ? " · consultou: " + escapeHtml(m.tools.join(", ")) : ""}</div>
+      <div style="white-space:pre-wrap">${escapeHtml(m.content)}</div>
+    </div>`).join("") || `<div class="empty-state"><p>Faça uma pergunta sobre o cluster ativo.</p></div>`;
+  log.scrollTop = log.scrollHeight;
+}
+
+async function loadAssistantConfig() {
+  renderChat();
+  const panel = document.getElementById("assistant-config-panel");
+  panel.classList.toggle("hidden", !can("admin"));
+  if (!can("admin")) return;
+  const data = await API.get("/assistant/config");
+  const c = data.config || {};
+  document.getElementById("ai-provider").value = c.provider || "anthropic";
+  document.getElementById("ai-model").value = c.model || "";
+  document.getElementById("ai-base-url").value = c.base_url || "";
+  document.getElementById("ai-api-version").value = c.api_version || "";
+  document.getElementById("ai-auth-header").value = c.auth_header || "bearer";
+  document.getElementById("ai-config-status").textContent =
+    (data.licensed ? "" : "Licença atual não inclui o assistente. ") +
+    (c.model ? `Configurado: ${c.provider} · ${c.model}${c.has_key ? " · chave salva" : ""}` : "Não configurado");
+}
+
+document.getElementById("assistant-config-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const body = Object.fromEntries(new FormData(event.currentTarget));
+  for (const k of ["base_url", "api_version"]) if (!body[k]) body[k] = null;
+  if (!body.api_key) delete body.api_key;
+  try {
+    const res = await fetch("/api/assistant/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json",
+        ...(state.selectedClusterId ? { "X-Cluster-Id": state.selectedClusterId } : {}) },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Erro ${res.status}`);
+    document.getElementById("ai-api-key").value = "";
+    toast("Configuração do assistente salva", "success");
+    await loadAssistantConfig();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+});
+
+document.getElementById("chat-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const input = document.getElementById("chat-input");
+  const question = input.value.trim();
+  if (!question) return;
+  chatHistory.push({ role: "user", content: question });
+  input.value = "";
+  renderChat();
+  const send = document.getElementById("chat-send");
+  const status = document.getElementById("chat-status");
+  send.disabled = true;
+  status.textContent = "Analisando o cluster…";
+  try {
+    const result = await API.post("/assistant/chat", {
+      messages: chatHistory.filter((m) => !m.content.startsWith("Erro: ")).slice(-10)
+        .map((m) => ({ role: m.role, content: m.content })),
+    });
+    chatHistory.push({ role: "assistant", content: result.answer || "(sem resposta)", tools: result.tools_used });
+  } catch (e) {
+    chatHistory.push({ role: "assistant", content: `Erro: ${e.message}` });
+  } finally {
+    send.disabled = false;
+    status.textContent = "";
+    renderChat();
+  }
+});
+
+document.getElementById("chat-clear").addEventListener("click", () => {
+  chatHistory.length = 0;
+  renderChat();
 });
 
 // ── Usuários e convites ─────────────────────────────────────
