@@ -33,7 +33,7 @@ def _slim(items):
 
 
 def build_snapshot():
-    from collectors.kubernetes import get_cluster_events, get_nodes, get_pods
+    from collectors.kubernetes import get_cluster_events, get_controllers, get_hpas, get_nodes, get_pods
     from collectors.metrics import get_container_metrics, get_node_metrics, get_pod_metrics
 
     nodes = get_nodes()
@@ -47,6 +47,8 @@ def build_snapshot():
         "events": {"items": _slim(events.get("items", []))},
         "node_metrics": get_node_metrics(),
         "pod_metrics": get_pod_metrics(),
+        "controllers": {"items": _slim(get_controllers().get("items", []))},
+        "hpas": {"items": _slim(get_hpas().get("items", []))},
         "container_metrics": [
             [ns, pod, container, value["cpu_m"], value["mem_b"]]
             for (ns, pod, container), value in get_container_metrics().items()
@@ -67,6 +69,8 @@ def snapshot_to_data(snapshot):
             for row in snapshot.get("container_metrics") or []
             if isinstance(row, list) and len(row) == 5
         },
+        "controllers": snapshot.get("controllers") or {"items": []},
+        "hpas": snapshot.get("hpas") or {"items": []},
         "node_pools": [],
     }
 

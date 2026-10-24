@@ -234,3 +234,19 @@ def get_cluster_events():
         return {"items": []}
 
     return json.loads(output)
+
+
+def _json_or_empty(output):
+    try:
+        return json.loads(output) if output else {"items": []}
+    except ValueError:
+        return {"items": []}
+
+
+def get_controllers():
+    """Deployments e StatefulSets (para réplicas e detecção de GitOps). Tolerante a falta de permissão."""
+    return _json_or_empty(run("kubectl get deployments,statefulsets -A -o json"))
+
+
+def get_hpas():
+    return _json_or_empty(run("kubectl get horizontalpodautoscalers.autoscaling -A -o json"))

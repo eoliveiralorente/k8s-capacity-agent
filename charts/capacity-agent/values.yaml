@@ -11,12 +11,26 @@ imagePullSecrets: []
 rbac:
   # Leitura de nodes, pods, events, métricas e logs (necessário).
   readLogs: true
-  # Permite aplicar rightsizing de requests (kubectl set resources) após aprovação.
+  # Permite aplicar, após aprovação: requests (set resources), réplicas (scale) e HPA (criar/ajustar max).
   # Desligado por padrão: a instalação é somente leitura.
   allowRightsizing: false
 
 # Coleta automática de amostras (minutos; 0 desativa).
 sampleMinutes: 15
+# Avaliação completa agendada — gera recomendações e alertas (minutos; 0 desativa).
+evaluateMinutes: 60
+
+# URL pública do painel (usada nos links dos alertas). Ex.: https://capacity.cliente.com.br
+publicUrl: ""
+
+# E-mail dos alertas (SMTP). A senha vem de um Secret com a chave "password".
+smtp:
+  host: ""
+  port: 587
+  user: ""
+  from: ""
+  starttls: true
+  passwordSecret: ""
 
 # Tempo máximo (s) de cada chamada ao provedor de IA (IA local em CPU precisa de mais).
 aiTimeoutSeconds: 240

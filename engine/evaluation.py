@@ -75,6 +75,9 @@ def collect_cluster_data():
     node_metrics = get_node_metrics()
     pod_metrics = get_pod_metrics()
     container_metrics = get_container_metrics()
+    from collectors.kubernetes import get_controllers, get_hpas
+    controllers = get_controllers()
+    hpas = get_hpas()
     node_pools = get_node_pools() if provider == "gke" else []
 
     return {
@@ -84,14 +87,17 @@ def collect_cluster_data():
         "node_metrics": node_metrics,
         "pod_metrics": pod_metrics,
         "container_metrics": container_metrics,
+        "controllers": controllers,
+        "hpas": hpas,
         "node_pools": node_pools,
     }
 
 
-def workload_recommendations(pods, container_metrics):
-    """Grava a amostra atual por container e gera rightsizing pelo histórico."""
+def workload_recommendations(pods, container_metrics, controllers=None, hpas=None):
+    """Grava a amostra atual por container e gera rightsizing, réplicas e HPA pelo histórico."""
     import logging
 
+    from analyzers.scaling import scaling_recommendations
     from analyzers.workloads import collect_workloads, rightsizing_recommendations
     from approval.store import load_workload_samples, save_workload_samples
 
@@ -99,7 +105,13 @@ def workload_recommendations(pods, container_metrics):
         samples, specs = collect_workloads(pods, container_metrics)
         if samples:
             save_workload_samples(samples)
-        return rightsizing_recommendations(specs, load_workload_samples(days=14))
+        history = load_workload_samples(days=14)
+        recs = rightsizing_recommendations(specs, history)
+        try:
+            recs += scaling_recommendations(specs, history, controllers or {}, hpas or {})
+        except Exception as exc:
+            logging.getLogger("capacity-agent").warning("Análise de réplicas/HPA indisponível: %s", exc)
+        return recs
     except Exception as exc:  # rightsizing nunca deve derrubar a avaliação
         logging.getLogger("capacity-agent").warning("Rightsizing indisponível: %s", exc)
         return []
@@ -157,7 +169,8 @@ def evaluate_cluster(data=None):
             rec["node_count"] = pool_data["capacity"]["node_count"]
             capacity_recommendations.append(rec)
 
-    workload_recs = workload_recommendations(pods, data.get("container_metrics") or {})
+    workload_recs = workload_recommendations(pods, data.get("container_metrics") or {},
+                                             data.get("controllers"), data.get("hpas"))
     from alerts.rules import unhealthy_pods
     try:
         unhealthy = unhealthy_pods(pods)

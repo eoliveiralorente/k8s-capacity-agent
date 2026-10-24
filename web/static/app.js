@@ -309,6 +309,12 @@ function recDetailHtml(rec) {
         CPU ${escapeHtml(params.current?.cpu || "—")} → ${escapeHtml(params.target?.cpu)},
         memória ${escapeHtml(params.current?.memory || "—")} → ${escapeHtml(params.target?.memory)}</dd>
     `;
+  } else if (op.executable && op.kind === "k8s_scale") {
+    opHtml = `<dt>Operação</dt><dd>Escalar ${escapeHtml(params.kind)}/${escapeHtml(params.name)}: ${params.current_replicas} → ${params.target_replicas} réplicas</dd>`;
+  } else if (op.executable && op.kind === "k8s_create_hpa") {
+    opHtml = `<dt>Operação</dt><dd>Criar HPA para ${escapeHtml(params.kind)}/${escapeHtml(params.name)}: min ${params.min_replicas}, max ${params.max_replicas}, alvo ${params.cpu_percent}% CPU</dd>`;
+  } else if (op.executable && op.kind === "k8s_patch_hpa_max") {
+    opHtml = `<dt>Operação</dt><dd>HPA ${escapeHtml(params.hpa)}: maxReplicas ${params.current_max} → ${params.target_max}</dd>`;
   } else if (op.executable) {
     opHtml = `
       <dt>Operação</dt>

@@ -34,10 +34,8 @@ def estimate(rec, capacity, settings):
         if not nodes:
             return None
         return _value(bucket.get("cpu_allocatable", 0) / nodes, bucket.get("mem_allocatable", 0) / nodes, settings)
-    if rec_type in ("RIGHTSIZE_REQUESTS", "INCREASE_REQUESTS"):
-        delta = (rec.get("operation") or {}).get("params", {}).get("delta")
-        if not delta:
-            return None
+    delta = (rec.get("operation") or {}).get("params", {}).get("delta")
+    if delta:
         return _value(delta.get("cpu_m", 0), delta.get("mem_b", 0), settings)
     return None
 
