@@ -427,8 +427,10 @@ def run_evaluation(source="cli", actor=None):
     else:
         cluster = CLUSTER
 
-    if current_cluster_mode.get() == "agent":
+    from support.demo_exec import is_demo_cluster
+    if current_cluster_mode.get() == "agent" and not is_demo_cluster():
         # Modo agente é somente leitura: nenhuma ação executável pelo painel.
+        # (No ambiente demo o fluxo fica executável, com execução simulada.)
         for rec in result["recommendations"]:
             op = rec.get("operation") or {}
             if op.get("executable"):

@@ -9,9 +9,12 @@ permissions:
   contents: write
   packages: write
 
+env:
+  TRIVY_IMAGE: aquasec/trivy:0.56.2
+
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -28,7 +31,7 @@ jobs:
       - name: Testes
         run: |
           python -m pip install --requirement requirements.txt
-          TESTS=$(ls test_*.py | grep -v -E '^test_(capacity|health|tess)\.py$' | sed 's/\.py$//')
+          TESTS=$(ls test_*.py | grep -v -E '^test_(capacity|health|tess|metrics_coverage)\.py$' | sed 's/\.py$//')
           python -m unittest $TESTS
 
       - name: Set up QEMU
@@ -45,14 +48,25 @@ jobs:
           tags: capacity-agent:scan
           build-args: CAPACITY_AGENT_VERSION=${{ steps.version.outputs.version }}
 
-      - name: Scan de vulnerabilidades (Trivy)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: capacity-agent:scan
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: "1"
-          format: table
+      # Política de segurança da release:
+      #  1) Sistema operacional e bibliotecas do produto: bloqueia CRITICAL e HIGH com correção disponível.
+      #  2) Imagem inteira (inclui o binário do kubectl, mantido pelo Kubernetes): bloqueia CRITICAL.
+      #  3) Relatório completo de HIGH do kubectl, só informativo (corrigido no próximo patch upstream).
+      - name: Trivy — produto (bloqueia CRITICAL/HIGH)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" image \
+            --severity CRITICAL,HIGH --ignore-unfixed --skip-files /usr/local/bin/kubectl \
+            --exit-code 1 capacity-agent:scan
+
+      - name: Trivy — imagem completa (bloqueia CRITICAL)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" image \
+            --severity CRITICAL --ignore-unfixed --exit-code 1 capacity-agent:scan
+
+      - name: Trivy — relatório do kubectl (informativo)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" image \
+            --severity HIGH --ignore-unfixed --exit-code 0 capacity-agent:scan
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3

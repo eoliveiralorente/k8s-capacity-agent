@@ -748,6 +748,7 @@ async def api_ingest(request: Request):
                 raise HTTPException(status_code=413, detail="Snapshot descomprimido muito grande")
         snapshot = jsonlib.loads(raw)
         validate_snapshot(snapshot)
+        snapshot.pop("demo", None)  # só o comando local `agent.py demo` cria um ambiente demo
     except HTTPException:
         raise
     except (ValueError, zlib.error, gzip.BadGzipFile) as exc:
@@ -1021,7 +1022,9 @@ def api_evaluate():
 
 @app.post("/api/recommendations/{rec_id}/approve")
 def api_approve(rec_id: str, body: ApproveRequest):
-    _license_guard(require_feature, "execution")
+    from support.demo_exec import is_demo_cluster
+    if not is_demo_cluster():
+        _license_guard(require_feature, "execution")
 
     result = approve(rec_id, _actor())
 
@@ -1044,7 +1047,10 @@ def api_reject(rec_id: str, body: RejectRequest):
 
 @app.post("/api/recommendations/{rec_id}/execute")
 def api_execute(rec_id: str, body: ExecuteRequest):
-    _license_guard(require_feature, "execution")
+    from support.demo_exec import is_demo_cluster, simulate_operation
+    demo = is_demo_cluster()
+    if not demo:
+        _license_guard(require_feature, "execution")
 
     if not body.dry_run and (current_user.get() or {}).get("role") != "admin":
         raise HTTPException(status_code=403, detail="Execução real requer papel 'admin'")
@@ -1062,7 +1068,7 @@ def api_execute(rec_id: str, body: ExecuteRequest):
     if not allowed and not body.dry_run:
         raise HTTPException(status_code=400, detail=reason)
 
-    result = execute_operation(item["operation"], dry_run=body.dry_run)
+    result = (simulate_operation if demo else execute_operation)(item["operation"], dry_run=body.dry_run)
 
     if not body.dry_run:
         mark_executed(rec_id, result, executed_by=_actor())

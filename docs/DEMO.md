@@ -35,6 +35,9 @@ kubectl -n capacity-agent exec deploy/capacity-agent -- python agent.py demo --p
 Entre com `demo@capacity-agent.local` e a senha escolhida. Rodar de novo refaz o
 histórico e a avaliação (a conta e o diário são mantidos). Use `--email` para outra conta.
 
-Limitação: o cluster demo é do tipo agente, então as recomendações aparecem como
-manuais (sem "Aprovar/Executar"). Para gravar o fluxo de aprovação e execução, use o
-laboratório kind.
+Fluxo de aprovação: no cluster demo as recomendações ficam executáveis. "Aprovar",
+"Simular" e "Executar" funcionam normalmente (com auditoria e mudança de status), mas a
+execução é **simulada**: o painel mostra o comando kubectl, a saída e como reverter, e
+nada é aplicado em cluster algum. Namespaces protegidos e recomendações de baixa
+confiança continuam manuais, como num cluster real. Depois de atualizar o painel, rode
+`agent.py demo` de novo para as recomendações saírem executáveis.

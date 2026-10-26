@@ -35,6 +35,34 @@ class DemoTest(unittest.TestCase):
         self.assertFalse(again["created"])
         self.assertIsNone(again["password"])
 
+    def test_demo_recommendations_are_executable_and_simulated(self):
+        from support.demo import seed_demo
+        from support.demo_exec import is_demo_cluster, simulate_operation
+        from accounts.store import _connect, list_clusters
+        from approval.store import load_recommendations
+        from tenant_context import current_cluster_id, current_cluster_mode, current_tenant_id
+
+        seed_demo(email="demo2@test.local", password="y" * 12)
+        with _connect() as c:
+            tenant = c.execute("SELECT tenant_id FROM users WHERE email='demo2@test.local'").fetchone()[0]
+        cluster = list_clusters(tenant)[0]
+        tokens = [(current_tenant_id, current_tenant_id.set(tenant)), (current_cluster_id, current_cluster_id.set(cluster["id"])),
+                  (current_cluster_mode, current_cluster_mode.set("agent"))]
+        try:
+            self.assertTrue(is_demo_cluster())
+            items = load_recommendations().get("items", [])
+            executable = [r for r in items if (r.get("operation") or {}).get("executable")]
+            self.assertGreater(len(executable), 3)
+            scale = next(r for r in executable if r["operation"]["kind"] == "k8s_scale")
+            out = simulate_operation(scale["operation"], dry_run=True)
+            self.assertTrue(out["success"] and out["simulated"])
+            self.assertIn("--dry-run=server", out["command"])
+            self.assertIn("[demo]", out["output"])
+            self.assertIn("kubectl scale", out["rollback_command"])
+        finally:
+            for var, value in reversed(tokens):
+                var.reset(value)
+
 
 if __name__ == "__main__":
     unittest.main()
