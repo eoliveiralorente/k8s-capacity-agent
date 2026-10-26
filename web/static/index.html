@@ -69,6 +69,7 @@
         <p class="nav-section">Operação</p>
         <button class="nav-item active" data-tab="overview">Visão Geral</button>
         <button class="nav-item" data-tab="recommendations">Recomendações</button>
+        <button class="nav-item" data-tab="costs">Custos</button>
         <button class="nav-item" data-tab="capacity">Nodes e capacidade</button>
         <button class="nav-item" data-tab="scheduling">Pods e scheduling</button>
         <button class="nav-item" data-tab="assistant">Assistente IA</button>
@@ -91,6 +92,7 @@
     </aside>
 
     <main class="content">
+      <div class="demo-banner hidden" id="demo-banner"></div>
       <header class="topbar">
         <div>
           <h2 id="page-title">Visão Geral</h2>
@@ -132,7 +134,7 @@
             <div class="panel-body" id="ov-risks"></div>
           </div>
           <div class="panel ov-panel">
-            <div class="panel-header"><h3>Maiores economias</h3><button class="btn btn-ghost btn-sm" data-goto="recommendations">Ver todas</button></div>
+            <div class="panel-header"><h3>Maiores economias</h3><button class="btn btn-ghost btn-sm" data-goto="costs">Ver custos</button></div>
             <div class="panel-body" id="ov-savings"></div>
           </div>
         </div>
@@ -371,16 +373,32 @@
             </form>
           </div>
         </div>
-        <div class="panel">
-          <div class="panel-header"><h3>Custos da infraestrutura (para estimar economia)</h3></div>
+        <div class="panel" id="cost-panel">
+          <div class="panel-header"><h3>Custos da infraestrutura</h3></div>
           <div class="panel-body">
-            <form id="cost-form" class="cluster-form">
-              <div class="form-group"><label for="cost-cpu">Custo de 1 vCPU por mês (R$)</label>
-                <input id="cost-cpu" type="number" min="0" step="0.01" placeholder="ex.: 60"></div>
-              <div class="form-group"><label for="cost-gb">Custo de 1 GB de RAM por mês (R$)</label>
-                <input id="cost-gb" type="number" min="0" step="0.01" placeholder="ex.: 15"></div>
+            <p class="cost-intro">Cadastre quanto você paga por cada tipo de máquina. O painel calcula o custo de cada node, divide entre os workloads pelo que cada um reserva e mostra quanto está pago e ocioso. Use o mesmo valor da sua fatura (com descontos, se houver).</p>
+            <form id="cost-form" class="cost-form">
+              <h4>Preço por tipo de máquina</h4>
+              <p class="form-hint">Identificação: tipo de máquina (label <code>node.kubernetes.io/instance-type</code>), nome do node pool ou nome do node. Use <code>*</code> para um preço padrão.</p>
+              <div class="cost-detected" id="cost-detected"></div>
+              <div class="cost-rows" id="cost-machines"></div>
+              <button class="btn btn-ghost btn-sm" type="button" id="cost-add-machine">+ Adicionar máquina</button>
+              <datalist id="cost-machine-options"></datalist>
+
+              <h4>Custos fixos mensais do cluster</h4>
+              <p class="form-hint">Ex.: taxa do Kubernetes gerenciado, load balancers, volumes, backups.</p>
+              <div class="cost-rows" id="cost-fixed"></div>
+              <button class="btn btn-ghost btn-sm" type="button" id="cost-add-fixed">+ Adicionar custo fixo</button>
+
+              <h4>Preço de referência (para nodes sem preço cadastrado)</h4>
+              <div class="cost-ref">
+                <div class="form-group"><label for="cost-cpu">1 vCPU por mês (R$)</label>
+                  <input id="cost-cpu" type="number" min="0" step="0.01" placeholder="ex.: 60"></div>
+                <div class="form-group"><label for="cost-gb">1 GB de RAM por mês (R$)</label>
+                  <input id="cost-gb" type="number" min="0" step="0.01" placeholder="ex.: 15"></div>
+              </div>
               <div class="cluster-form-actions">
-                <span class="form-hint">Dica: divida o preço mensal de um node pelos vCPUs e GB dele.</span>
+                <span class="form-hint">Depois de salvar, clique em Nova Avaliação para recalcular.</span>
                 <button class="btn btn-primary" type="submit">Salvar custos</button>
               </div>
             </form>
@@ -426,6 +444,28 @@
         </div>
       </section>
 
+      <section class="tab-panel" id="tab-costs">
+        <div class="ov-kpis" id="cost-kpis"></div>
+        <div class="panel ov-panel">
+          <div class="panel-header"><h3>Para onde vai o dinheiro</h3><button class="btn btn-ghost btn-sm hidden" id="cost-settings-btn">Preços e custos</button></div>
+          <div class="panel-body" id="cost-breakdown"></div>
+        </div>
+        <div class="ov-cols">
+          <div class="panel ov-panel">
+            <div class="panel-header"><h3>Por namespace</h3></div>
+            <div class="panel-body" id="cost-namespaces"></div>
+          </div>
+          <div class="panel ov-panel">
+            <div class="panel-header"><h3>Por node pool</h3></div>
+            <div class="panel-body" id="cost-pools"></div>
+          </div>
+        </div>
+        <div class="panel ov-panel">
+          <div class="panel-header"><h3>Economias possíveis</h3><button class="btn btn-ghost btn-sm" data-goto="recommendations">Ver recomendações</button></div>
+          <div class="panel-body" id="cost-savings"></div>
+        </div>
+      </section>
+
       <section class="tab-panel" id="tab-assistant">
         <div class="panel">
           <div class="panel-header"><h3>Assistente de SRE</h3></div>
@@ -454,15 +494,16 @@
                 <select id="ai-provider" name="provider">
                   <option value="anthropic">Anthropic (Claude)</option>
                   <option value="openai">Compatível com OpenAI (OpenAI, Azure OpenAI, Ollama local)</option>
+                  <option value="tess">Tess AI (agente da Tess)</option>
                 </select>
               </div>
               <div class="form-group"><label for="ai-model">Modelo</label>
                 <input id="ai-model" name="model" maxlength="120" placeholder="ex.: claude-sonnet-5-5 · gpt-4o · llama3.1" required></div>
-              <div class="form-group"><label for="ai-base-url">URL base (opcional)</label>
+              <div class="form-group"><label for="ai-base-url" id="ai-base-url-label">URL base (opcional)</label>
                 <input id="ai-base-url" name="base_url" maxlength="300" placeholder="Ollama: http://ollama:11434/v1 · Azure: https://<recurso>.openai.azure.com/openai/deployments/<deploy>"></div>
-              <div class="form-group"><label for="ai-api-version">api-version (somente Azure)</label>
+              <div class="form-group"><label for="ai-api-version" id="ai-api-version-label">api-version (somente Azure)</label>
                 <input id="ai-api-version" name="api_version" maxlength="40"></div>
-              <div class="form-group"><label for="ai-auth-header">Cabeçalho de autenticação</label>
+              <div class="form-group" id="ai-auth-header-group"><label for="ai-auth-header">Cabeçalho de autenticação</label>
                 <select id="ai-auth-header" name="auth_header"><option value="bearer">Authorization: Bearer</option><option value="api-key">api-key (Azure)</option></select></div>
               <div class="form-group"><label for="ai-api-key">Chave de API (deixe vazio para manter a atual)</label>
                 <input id="ai-api-key" name="api_key" type="password" maxlength="500" autocomplete="off"></div>

@@ -55,27 +55,32 @@ def _load_private():
     return serialization.load_pem_private_key(path.read_bytes(), password=None)
 
 
-def cmd_issue(args):
+def issue_license(customer, plan, clusters, users, days=365, features=None):
+    """Retorna (envelope assinado, payload). Usado pelo `issue` e pelo kit de entrega."""
     key = _load_private()
-    features = PLANS.get(args.plan, [])
-    if args.features:
-        features = [f.strip() for f in args.features.split(",") if f.strip()]
+    features = list(features) if features else PLANS.get(plan, [])
     now = datetime.now(timezone.utc)
     payload = {
         "license_id": uuid.uuid4().hex[:12],
-        "customer": args.customer,
-        "plan": args.plan,
-        "max_clusters": args.clusters,
-        "max_users": args.users,
+        "customer": customer,
+        "plan": plan,
+        "max_clusters": clusters,
+        "max_users": users,
         "features": features,
         "issued_at": now.isoformat(),
-        "expires_at": (now + timedelta(days=args.days)).replace(microsecond=0).isoformat(),
+        "expires_at": (now + timedelta(days=days)).replace(microsecond=0).isoformat(),
     }
     payload_bytes = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
     envelope = {
         "payload": base64.b64encode(payload_bytes).decode(),
         "signature": base64.b64encode(key.sign(payload_bytes)).decode(),
     }
+    return envelope, payload
+
+
+def cmd_issue(args):
+    features = [f.strip() for f in args.features.split(",") if f.strip()] if args.features else None
+    envelope, payload = issue_license(args.customer, args.plan, args.clusters, args.users, args.days, features)
     Path(args.output).write_text(json.dumps(envelope, indent=2), encoding="utf-8")
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     print(f"\nLicença gravada em {args.output}")

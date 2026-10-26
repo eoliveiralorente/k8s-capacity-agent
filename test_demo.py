@@ -34,6 +34,11 @@ class DemoTest(unittest.TestCase):
         again = seed_demo(email="demo@test.local")
         self.assertFalse(again["created"])
         self.assertIsNone(again["password"])
+        cost = again["cluster_cost"]
+        self.assertEqual(cost["accuracy"], "tabela")
+        self.assertGreater(cost["total_monthly"], 4000)
+        self.assertGreater(cost["idle_monthly"], 0)
+        self.assertTrue(cost["history"]["available"] and cost["history"]["autoscaling"])
 
     def test_demo_recommendations_are_executable_and_simulated(self):
         from support.demo import seed_demo

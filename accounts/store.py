@@ -127,6 +127,10 @@ def initialize_database():
             connection.execute("ALTER TABLE clusters ADD COLUMN ingest_token_hash TEXT")
         if "last_seen_at" not in cluster_columns:
             connection.execute("ALTER TABLE clusters ADD COLUMN last_seen_at TEXT")
+        cost_columns = {row["name"] for row in connection.execute("PRAGMA table_info(cost_settings)")}
+        for column in ("machine_prices", "fixed_costs"):
+            if column not in cost_columns:
+                connection.execute(f"ALTER TABLE cost_settings ADD COLUMN {column} TEXT")
         connection.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS clusters_ingest_idx ON clusters(ingest_token_hash) "
             "WHERE ingest_token_hash IS NOT NULL"
@@ -709,18 +713,32 @@ def get_cost_settings(tenant_id):
     initialize_database()
     with _connect() as connection:
         row = connection.execute(
-            "SELECT currency, cpu_month, gb_month, updated_at FROM cost_settings WHERE tenant_id = ?", (tenant_id,)
+            "SELECT currency, cpu_month, gb_month, machine_prices, fixed_costs, updated_at "
+            "FROM cost_settings WHERE tenant_id = ?", (tenant_id,)
         ).fetchone()
-    return dict(row) if row else default_settings()
+    if not row:
+        return default_settings()
+    settings = dict(row)
+    for key in ("machine_prices", "fixed_costs"):
+        try:
+            settings[key] = json.loads(settings.get(key) or "[]")
+        except ValueError:
+            settings[key] = []
+    return settings
 
 
-def save_cost_settings(tenant_id, cpu_month, gb_month, currency="BRL"):
+def save_cost_settings(tenant_id, cpu_month, gb_month, currency="BRL", machine_prices=None, fixed_costs=None):
+    """machine_prices/fixed_costs=None mantém o que já está salvo."""
     initialize_database()
+    current = get_cost_settings(tenant_id)
+    machine_prices = current.get("machine_prices", []) if machine_prices is None else machine_prices
+    fixed_costs = current.get("fixed_costs", []) if fixed_costs is None else fixed_costs
     with _connect() as connection:
         connection.execute(
-            "INSERT OR REPLACE INTO cost_settings(tenant_id, currency, cpu_month, gb_month, updated_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (tenant_id, currency, float(cpu_month), float(gb_month), datetime.now(timezone.utc).isoformat()),
+            "INSERT OR REPLACE INTO cost_settings(tenant_id, currency, cpu_month, gb_month, machine_prices, "
+            "fixed_costs, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (tenant_id, currency, float(cpu_month), float(gb_month), json.dumps(machine_prices),
+             json.dumps(fixed_costs), datetime.now(timezone.utc).isoformat()),
         )
 
 

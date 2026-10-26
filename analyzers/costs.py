@@ -1,7 +1,9 @@
 """Estimativa de custo/economia mensal das recomendações (R$).
 
-Modelo simples e transparente, configurável por empresa:
-  custo de 1 vCPU/mês  e  custo de 1 GB de RAM/mês.
+Com tabela de preços por máquina (analyzers/cluster_cost.py):
+- Reduzir pool: economia = preço real de 1 node do pool.
+- Rightsizing: usa o R$/vCPU e R$/GB efetivos derivados dos nodes.
+Sem tabela, modelo simples por empresa: custo de 1 vCPU/mês e de 1 GB de RAM/mês.
 - Reduzir pool: economia = recursos de 1 node (allocatable médio do pool).
 - Rightsizing: economia potencial = (request atual − proposto) × réplicas.
   Só vira economia real quando a sobra permite remover nodes — por isso "potencial".
@@ -17,6 +19,8 @@ def default_settings():
         "currency": "BRL",
         "cpu_month": float(os.getenv("CAPACITY_AGENT_COST_CPU_MONTH", "0") or 0),
         "gb_month": float(os.getenv("CAPACITY_AGENT_COST_GB_MONTH", "0") or 0),
+        "machine_prices": [],
+        "fixed_costs": [],
     }
 
 
@@ -24,19 +28,31 @@ def _value(cpu_m, mem_b, settings):
     return round(cpu_m / 1000 * settings["cpu_month"] + mem_b / GIB * settings["gb_month"], 2)
 
 
-def estimate(rec, capacity, settings):
-    if not settings or (not settings.get("cpu_month") and not settings.get("gb_month")):
-        return None
+def _unit_settings(settings, cluster_cost):
+    """Com tabela de máquinas, o preço por vCPU/GB vem dos próprios nodes (mais fiel)."""
+    if cluster_cost and (cluster_cost.get("coverage") or {}).get("tabela") and cluster_cost.get("effective_cpu_month"):
+        return {"cpu_month": cluster_cost["effective_cpu_month"], "gb_month": cluster_cost.get("effective_gb_month") or 0}
+    return settings or {}
+
+
+def estimate(rec, capacity, settings, cluster_cost=None):
     rec_type = rec.get("type")
+    if rec_type == "UNDERUTILIZED_POOL":
+        pool_cost = ((cluster_cost or {}).get("by_pool") or {}).get(rec.get("pool")) or {}
+        if pool_cost.get("per_node"):
+            return pool_cost["per_node"]  # preço real de 1 node do pool
+    units = _unit_settings(settings, cluster_cost)
+    if not units or (not units.get("cpu_month") and not units.get("gb_month")):
+        return None
     if rec_type == "UNDERUTILIZED_POOL":
         bucket = (capacity.get(rec.get("pool")) or {}).get("capacity", {})
         nodes = bucket.get("node_count") or 0
         if not nodes:
             return None
-        return _value(bucket.get("cpu_allocatable", 0) / nodes, bucket.get("mem_allocatable", 0) / nodes, settings)
+        return _value(bucket.get("cpu_allocatable", 0) / nodes, bucket.get("mem_allocatable", 0) / nodes, units)
     delta = (rec.get("operation") or {}).get("params", {}).get("delta")
     if delta:
-        return _value(delta.get("cpu_m", 0), delta.get("mem_b", 0), settings)
+        return _value(delta.get("cpu_m", 0), delta.get("mem_b", 0), units)
     return None
 
 
@@ -46,10 +62,10 @@ def fmt_brl(value):
     return f"{sign}R$ {text}"
 
 
-def apply_costs(recommendations, capacity, settings):
+def apply_costs(recommendations, capacity, settings, cluster_cost=None):
     total = 0.0
     for rec in recommendations:
-        value = estimate(rec, capacity, settings)
+        value = estimate(rec, capacity, settings, cluster_cost)
         rec["estimated_monthly"] = value
         if value is None:
             continue

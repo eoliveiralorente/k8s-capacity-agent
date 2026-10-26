@@ -239,7 +239,7 @@ def healthz():
 
 
 class AssistantConfigRequest(BaseModel):
-    provider: str = Field(pattern="^(anthropic|openai)$")
+    provider: str = Field(pattern="^(anthropic|openai|tess)$")
     model: str = Field(min_length=2, max_length=120)
     base_url: str | None = Field(default=None, max_length=300)
     api_version: str | None = Field(default=None, max_length=40)
@@ -270,6 +270,9 @@ def api_assistant_config():
 @app.put("/api/assistant/config")
 def api_save_assistant_config(body: AssistantConfigRequest):
     user = current_user.get()
+    if body.provider == "tess" and body.base_url:
+        from assistant.engine import tess_agent_base
+        body.base_url = tess_agent_base(body.base_url)
     if body.base_url and not re.fullmatch(r"https?://[^\s]+", body.base_url):
         raise HTTPException(status_code=422, detail="base_url inválida")
     save_assistant_config(user["tenant_id"], body.provider, body.model, body.base_url,
@@ -358,9 +361,23 @@ def api_alerts_active():
     return {"alerts": list_active_alerts()}
 
 
+class MachinePrice(BaseModel):
+    match: str = Field(min_length=1, max_length=120)  # tipo de máquina, node pool, nome do node ou "*"
+    price: float = Field(gt=0, le=1000000)
+    unit: str = Field(default="month", pattern="^(hour|month)$")
+
+
+class FixedCost(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    monthly: float = Field(gt=0, le=10000000)
+    qty: float = Field(default=1, gt=0, le=10000)
+
+
 class CostSettingsRequest(BaseModel):
     cpu_month: float = Field(ge=0, le=100000)
     gb_month: float = Field(ge=0, le=100000)
+    machine_prices: list[MachinePrice] | None = Field(default=None, max_length=60)
+    fixed_costs: list[FixedCost] | None = Field(default=None, max_length=30)
 
 
 class JournalCreateRequest(BaseModel):
@@ -434,8 +451,13 @@ def api_costs():
 @app.put("/api/costs")
 def api_save_costs(body: CostSettingsRequest):
     user = current_user.get()
-    save_cost_settings(user["tenant_id"], body.cpu_month, body.gb_month)
-    append_audit("cost_settings", {"cpu_month": body.cpu_month, "gb_month": body.gb_month, "by": _actor()})
+    machines = None if body.machine_prices is None else [m.model_dump() for m in body.machine_prices]
+    fixed = None if body.fixed_costs is None else [f.model_dump() for f in body.fixed_costs]
+    save_cost_settings(user["tenant_id"], body.cpu_month, body.gb_month,
+                       machine_prices=machines, fixed_costs=fixed)
+    append_audit("cost_settings", {"cpu_month": body.cpu_month, "gb_month": body.gb_month,
+                                   "machine_prices": len(machines or []), "fixed_costs": len(fixed or []),
+                                   "by": _actor()})
     return get_cost_settings(user["tenant_id"])
 
 
@@ -475,6 +497,7 @@ def api_license():
 
 @app.post("/api/license")
 def api_upload_license(body: LicenseUpload):
+    _demo_only_guard()
     try:
         payload = save_license_text(body.license.strip())
     except LicenseError as exc:
@@ -645,6 +668,7 @@ def api_clusters():
 
 @app.post("/api/clusters")
 def api_add_cluster(body: ClusterRequest):
+    _demo_only_guard()
     user = current_user.get()
     _license_guard(check_limit, "clusters", len(list_clusters(user["tenant_id"])))
     kubeconfig = body.kubeconfig.encode("utf-8")
@@ -683,6 +707,7 @@ def _collector_instructions(request, token):
 
 @app.post("/api/clusters/agent")
 def api_add_agent_cluster(body: AgentClusterRequest, request: Request):
+    _demo_only_guard()
     user = current_user.get()
     _license_guard(require_feature, "agent_mode")
     _license_guard(check_limit, "clusters", len(list_clusters(user["tenant_id"])))
@@ -793,6 +818,17 @@ def api_delete_cluster(cluster_id: str):
     return {"success": True}
 
 
+DEMO_ONLY = os.getenv("CAPACITY_AGENT_DEMO_ONLY", "").lower() in ("1", "true", "yes")
+DEMO_CONTACT = os.getenv("CAPACITY_AGENT_DEMO_CONTACT", "")
+
+
+def _demo_only_guard():
+    """Pacote de demonstração: só o ambiente fictício; nada de clusters reais ou licença."""
+    if DEMO_ONLY:
+        raise HTTPException(status_code=403, detail="Esta é uma instalação de demonstração (dados fictícios). "
+                                                    "Fale com o fornecedor para instalar no seu cluster.")
+
+
 @app.get("/api/status")
 def api_status():
 
@@ -820,6 +856,8 @@ def api_status():
         "require_approval": REQUIRE_APPROVAL,
         "auto_execute": AUTO_EXECUTE,
         "latest_report": latest_report,
+        "demo_only": DEMO_ONLY,
+        "demo_contact": DEMO_CONTACT if DEMO_ONLY else "",
     }
 
 

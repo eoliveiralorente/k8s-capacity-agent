@@ -1,0 +1,28 @@
+# Capacity Agent — demonstração local (empresa e cluster fictícios).
+# Não acessa nenhum cluster: os dados são gerados pelo comando "agent.py demo".
+services:
+  capacity-agent-demo:
+    image: capacity-agent-demo:${DEMO_VERSION:-latest}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      CAPACITY_AGENT_DEMO_ONLY: "true"
+      CAPACITY_AGENT_DEMO_CONTACT: ${DEMO_CONTACT:-}
+      CAPACITY_AGENT_COOKIE_SECURE: "false"
+      CAPACITY_AGENT_STATE_DIR: /data/state
+      CAPACITY_AGENT_ACCOUNT_DB: /data/accounts.sqlite3
+      CAPACITY_AGENT_SAMPLE_MINUTES: "0"
+    ports:
+      - "127.0.0.1:${DEMO_PORT:-8090}:8080"
+    volumes:
+      - demo-data:/data
+
+volumes:
+  demo-data:

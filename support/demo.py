@@ -29,6 +29,20 @@ NODES = [
     ("memory-b2", "memory", 8, 64, False),
 ]
 
+# Tipos de máquina fictícios por pool e a tabela de preços do demo (R$/hora).
+MACHINES = {"control-plane": "std-4x8", "general": "std-8x32", "memory": "mem-8x64"}
+DEMO_MACHINE_PRICES = [
+    {"match": "std-4x8", "price": 0.38, "unit": "hour"},
+    {"match": "std-8x32", "price": 0.95, "unit": "hour"},
+    {"match": "mem-8x64", "price": 1.40, "unit": "hour"},
+]
+AUTOSCALE_PEAK_NODES = 3  # pool memory no pico (2 fora do pico)
+DEMO_FIXED_COSTS = [
+    {"name": "Kubernetes gerenciado", "monthly": 350.0, "qty": 1},
+    {"name": "Load balancer", "monthly": 60.0, "qty": 2},
+    {"name": "Volumes (disco)", "monthly": 180.0, "qty": 1},
+]
+
 # namespace, nome, tipo, réplicas, pool, cpu_req m, mem_req Mi, cpu_uso m, mem_uso Mi, perfil
 WORKLOADS = [
     ("payments", "api", "Deployment", 4, "general", 1000, 1024, 110, 380, "diurno"),
@@ -82,7 +96,8 @@ def build_snapshot(now=None, seed=7):
     pod_metrics, container_metrics = {}, []
 
     for name, pool, cpu, mem, cp in NODES:
-        labels = {"kubernetes.io/hostname": name, POOL_LABEL: pool, "topology.kubernetes.io/zone": "sa-east-1a"}
+        labels = {"kubernetes.io/hostname": name, POOL_LABEL: pool, "topology.kubernetes.io/zone": "sa-east-1a",
+                  "node.kubernetes.io/instance-type": MACHINES[pool]}
         if cp:
             labels["node-role.kubernetes.io/control-plane"] = ""
         nodes.append({
@@ -260,6 +275,11 @@ def _backfill_history(snapshot, now, days=7):
             for k in ("cpu_usage_vs_alloc_pct", "mem_usage_vs_alloc_pct"):
                 if m.get(k) is not None:
                     m[k] = round(m[k] * (day_f if k.startswith("cpu") else rng.uniform(0.95, 1.02)), 1)
+        # Autoscaling do pool memory: +1 node no horário comercial dos dias úteis
+        # (o custo pelo histórico fica acima do "agora", como num cluster real).
+        local = moment - timedelta(hours=3)
+        if "memory" in capacity and local.weekday() < 5 and 9 <= local.hour < 19:
+            capacity["memory"].setdefault("capacity", {})["node_count"] = AUTOSCALE_PEAK_NODES
         save_metric_samples(capacity, timestamp=_ts(moment))
 
 
@@ -305,7 +325,8 @@ def seed_demo(email="demo@capacity-agent.local", password=None):
         _backfill_history(snapshot, now)
         save_cluster_snapshot(snapshot)
         touch_agent_cluster(cluster["id"], len(snapshot["nodes"]["items"]), context_name="demo")
-        save_cost_settings(tenant_id, 150.0, 20.0)
+        save_cost_settings(tenant_id, 150.0, 20.0, machine_prices=DEMO_MACHINE_PRICES,
+                           fixed_costs=DEMO_FIXED_COSTS)
         _seed_journal(tenant_id, cluster["id"])
         report = run_evaluation(source="demo", actor="Equipe Demo")
     finally:
@@ -318,4 +339,5 @@ def seed_demo(email="demo@capacity-agent.local", password=None):
         "created": created,
         "cluster": cluster["name"],
         "recommendations": len((report or {}).get("recommendations", [])) if isinstance(report, dict) else None,
+        "cluster_cost": (report or {}).get("cluster_cost") if isinstance(report, dict) else None,
     }

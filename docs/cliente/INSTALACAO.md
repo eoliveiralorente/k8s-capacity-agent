@@ -6,15 +6,21 @@
 - `helm` 3.8+ e `kubectl` com acesso de administrador **somente durante a instalação**.
 - **metrics-server** instalado (`kubectl top nodes` precisa funcionar).
 - StorageClass padrão (ou informe `persistence.storageClassName`).
-- Imagem acessível pelo cluster (registry informado pelo fornecedor).
+- Token de acesso à imagem (enviado pelo fornecedor, separado do kit).
 
-## Instalação com Helm
+> Recebeu o kit `.zip`? O jeito mais rápido é o `instalar.sh` do kit: veja o [GUIA_RAPIDO.md](GUIA_RAPIDO.md).
+
+## Instalação com Helm (manual)
 
 ```bash
-helm upgrade --install capacity-agent ./charts/capacity-agent \
-  --namespace capacity-agent --create-namespace \
-  --set image.repository=<registry>/k8s-capacity-agent \
+kubectl create namespace capacity-agent
+kubectl -n capacity-agent create secret docker-registry capacity-agent-pull \
+  --docker-server=ghcr.io --docker-username=capacity-agent-bot --docker-password='<token>'
+
+helm upgrade --install capacity-agent ./capacity-agent-<versão>.tgz \
+  --namespace capacity-agent \
   --set image.tag=<versão> \
+  --set "imagePullSecrets[0].name=capacity-agent-pull" \
   --set clusterName="Produção"
 ```
 
@@ -35,9 +41,11 @@ cadastro fecha e novos usuários entram por **convite** (aba Usuários).
 
 Depois:
 1. **Usuários → Licença**: instale o arquivo `.license.json` recebido.
-2. **Usuários → Custos**: informe custo por vCPU e por GB/mês (para a economia em R$).
+2. **Usuários → Custos da infraestrutura**: cadastre o preço de cada tipo de máquina (R$/hora ou R$/mês)
+   e os custos fixos. O R$/vCPU e R$/GB servem de referência para nodes sem preço.
 3. **Usuários → Alertas**: configure Slack, Teams, webhook ou e-mail.
-4. **Assistente IA** (opcional): configure o provedor com a **sua** chave de API ou um Ollama interno.
+4. **Assistente IA** (opcional): configure o provedor com a **sua** chave de API (Claude, OpenAI, Azure,
+   Gemini, Tess, OpenRouter ou qualquer API compatível com OpenAI) ou um Ollama interno.
 5. **Visão Geral → Nova Avaliação**.
 
 ## Opções frequentes

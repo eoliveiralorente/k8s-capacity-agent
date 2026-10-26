@@ -237,6 +237,7 @@ function switchTab(tab) {
     cluster: "Clusters e conexões",
     recommendations: "Recomendações",
     capacity: "Nodes e capacidade",
+    costs: "Custos",
     scheduling: "Pods e scheduling",
     audit: "Auditoria",
     users: "Usuários e custos",
@@ -446,9 +447,104 @@ function renderOverview() {
   renderExecutiveOverview();
   renderOverviewStatus();
   renderNodesUsage();
+  renderCosts();
   renderNavCounts();
   loadJournalSummary();
 }
+
+const COST_ACCURACY = {
+  tabela: ["preços da sua tabela", "ok"],
+  aproximado: ["estimativa aproximada (R$/vCPU e R$/GB)", "warn"],
+};
+
+function renderCosts() {
+  const kpisBox = document.getElementById("cost-kpis");
+  if (!kpisBox) return;
+  document.getElementById("cost-settings-btn").classList.toggle("hidden", !can("admin"));
+  const report = state.status?.latest_report;
+  const c = report?.cluster_cost;
+  const k = report?.overview?.kpis || {};
+  const ids = ["cost-breakdown", "cost-namespaces", "cost-pools", "cost-savings"];
+  if (!c || !c.configured) {
+    kpisBox.innerHTML = "";
+    document.getElementById("cost-breakdown").innerHTML = `<div class="ov-empty">Cadastre o preço dos seus tipos de máquina
+      para ver quanto o cluster custa por mês, quanto cada namespace consome e quanto está pago e ocioso.
+      ${can("admin") ? "Use o botão Preços e custos." : "Peça a um admin para cadastrar em Usuários e custos."}</div>`;
+    ids.slice(1).forEach((id) => { document.getElementById(id).innerHTML = ""; });
+    document.getElementById("cost-settings-btn").classList.toggle("hidden", !can("admin"));
+    return;
+  }
+  const num = (v) => Number(v).toLocaleString("pt-BR");
+  const h = c.history && c.history.available ? c.history : null;
+  const [accLabel, accTone] = COST_ACCURACY[c.accuracy] || ["preços parciais", "warn"];
+  const kpi = (label, value, sub, cls = "") => `
+    <div class="kpi"><span class="kpi-label">${label}</span><strong class="kpi-value ${cls}">${value}</strong><span class="kpi-sub">${sub}</span></div>`;
+  kpisBox.innerHTML = [
+    kpi("Custo por mês (nodes de agora)", formatBRL(c.total_monthly), accLabel),
+    h ? kpi(`Média dos últimos ${num(h.days)} dias`, formatBRL(h.monthly),
+            `${h.diff_pct > 0 ? "+" : ""}${num(h.diff_pct)}% vs agora · gasto real ${formatBRL(h.spend_window)}`,
+            Math.abs(h.diff_pct || 0) >= 5 ? "warn" : "")
+      : kpi("Média do histórico", "—", c.history ? `disponível após ${c.history.min_hours} h de coleta` : "sem histórico ainda"),
+    kpi("Capacidade ociosa", formatBRL(c.idle_monthly), c.idle_pct != null ? `${num(c.idle_pct)}% dos nodes, pago sem uso` : "pago sem uso",
+        (c.idle_pct || 0) >= 40 ? "warn" : ""),
+    kpi("Economia potencial", k.savings_monthly == null ? "—" : formatBRL(k.savings_monthly),
+        k.savings_monthly == null ? "" : `por mês · ${k.savings_count} recomendação(ões)`, "ok"),
+  ].join("");
+
+  const total = c.total_monthly || 0;
+  const seg = (v) => total ? Math.max(0, v / total * 100) : 0;
+  const scaling = h ? Object.entries(h.pools || {}).filter(([, p]) => p.min_nodes !== p.max_nodes)
+    .map(([name, p]) => `${escapeHtml(name)} (${p.min_nodes}–${p.max_nodes} nodes, média ${num(p.avg_nodes)})`) : [];
+  const warns = [];
+  if (c.coverage?.sem_preco) warns.push(`${c.coverage.sem_preco} node(s) sem preço ficaram fora do total: ${escapeHtml((c.unpriced_types || []).join(", "))}.`);
+  if (c.coverage?.aproximado && c.coverage?.tabela) warns.push(`${c.coverage.aproximado} node(s) usam o preço de referência por vCPU/GB (aproximado).`);
+  if (scaling.length) warns.push(`Autoscaling detectado: ${scaling.join(", ")}. A média do histórico fica mais perto da fatura.`);
+  document.getElementById("cost-breakdown").innerHTML = `
+    <div class="cost-bar cost-bar-lg" role="img" aria-label="Composição do custo">
+      <i class="cb-alloc" style="width:${seg(c.allocated_monthly)}%"></i><i class="cb-idle" style="width:${seg(c.idle_monthly)}%"></i><i class="cb-fixed" style="width:${seg(c.fixed_monthly)}%"></i>
+    </div>
+    <ul class="cost-legend cost-legend-row">
+      <li><i class="cb-alloc"></i><div><span>Reservado pelos workloads</span><b>${formatBRL(c.allocated_monthly)}</b></div></li>
+      <li><i class="cb-idle"></i><div><span>Capacidade ociosa</span><b class="warn-text">${formatBRL(c.idle_monthly)}</b></div></li>
+      <li><i class="cb-fixed"></i><div><span>Custos fixos${(c.fixed || []).length ? ` (${(c.fixed || []).map((f) => escapeHtml(f.name)).join(", ")})` : ""}</span><b>${formatBRL(c.fixed_monthly)}</b></div></li>
+    </ul>
+    ${warns.map((w) => `<p class="cost-warn">${w}</p>`).join("")}
+    <p class="ov-foot">Preço por hora × 730 h/mês. Cada node é dividido entre os pods pelo que cada um reserva (requests). "Ociosa" é a capacidade paga que nenhum pod reserva: é ela que vira economia quando um node pode sair. A média do histórico usa quantos nodes cada pool teve a cada hora.</p>`;
+
+  const maxNs = Math.max(...(c.by_namespace || []).map((n) => n.monthly), 1);
+  document.getElementById("cost-namespaces").innerHTML = (c.by_namespace || []).map((n) => `
+    <div class="cost-ns"><span title="${escapeHtml(n.namespace)}">${escapeHtml(n.namespace)}</span>
+      <div class="cost-ns-bar"><i style="width:${n.monthly / maxNs * 100}%"></i></div><b>${formatBRL(n.monthly)}</b></div>`).join("")
+    || `<div class="ov-empty">Nenhum pod com requests.</div>`;
+
+  const pools = Object.entries(c.by_pool || {}).sort((a, b) => b[1].monthly - a[1].monthly);
+  document.getElementById("cost-pools").innerHTML = pools.map(([name, p]) => {
+    const hp = h?.pools?.[name];
+    return `
+    <div class="cost-pool"><div><strong>${escapeHtml(name)}</strong>
+      <span>${p.nodes} × ${escapeHtml(p.machine || "node")} · ${formatBRL(p.per_node)}/node${hp && hp.min_nodes !== hp.max_nodes ? ` · histórico ${hp.min_nodes}–${hp.max_nodes} nodes` : ""}</span></div>
+      <div class="cost-pool-val"><b>${formatBRL(p.monthly)}</b><span class="${p.idle_monthly > p.monthly * 0.4 ? "warn-text" : ""}">ocioso ${formatBRL(p.idle_monthly)}</span></div></div>`;
+  }).join("");
+
+  const savings = (report.recommendations || []).filter((r) => (r.estimated_monthly || 0) > 0 && !String(r.type).startsWith("INCREASE"))
+    .sort((a, b) => b.estimated_monthly - a.estimated_monthly).slice(0, 8);
+  document.getElementById("cost-savings").innerHTML = savings.length ? savings.map((s) => `
+    <div class="ov-item">
+      <strong class="ov-money">${formatBRL(s.estimated_monthly)}<small>/mês</small></strong>
+      <div class="ov-item-text"><strong>${escapeHtml(REC_TYPE_LABELS[s.type] || s.type)}</strong><span>${escapeHtml(s.pool || "")}${s.type === "UNDERUTILIZED_POOL" ? " · 1 node a menos" : " · vira dinheiro quando permitir remover nodes"}</span></div>
+      <button class="btn btn-ghost btn-sm" data-goto-rec="${escapeHtml(s.id || "")}">Revisar</button>
+    </div>`).join("") : `<div class="ov-empty">Nenhuma economia relevante identificada agora.</div>`;
+}
+
+document.getElementById("cost-settings-btn").addEventListener("click", () => {
+  switchTab("users");
+  setTimeout(() => document.getElementById("cost-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+});
+document.getElementById("tab-costs").addEventListener("click", (event) => {
+  const rec = event.target.closest("[data-goto-rec]");
+  if (rec) focusRecommendation(rec.dataset.gotoRec);
+});
+
 
 function renderNavCounts() {
   const pending = state.status?.gate?.counts?.pending ?? 0;
@@ -865,15 +961,114 @@ function renderSchedulingPods() {
 
 document.getElementById("scheduling-clear-filter").addEventListener("click", clearSchedulingNamespaceFilter);
 
+const AUDIT_META = {
+  evaluate: ["Avaliação", "eval", "◎"],
+  approve: ["Aprovação", "ok", "✓"],
+  reject: ["Rejeição", "bad", "✕"],
+  execute: ["Execução", "exec", "▶"],
+  journal_created: ["Diário", "info", "✎"],
+  journal_updated: ["Diário", "info", "✎"],
+  journal_deleted: ["Diário", "info", "✎"],
+  alerts_sent: ["Alertas", "warn", "!"],
+  alert_settings: ["Configuração", "cfg", "⚙"],
+  cost_settings: ["Configuração", "cfg", "⚙"],
+  assistant_config: ["Configuração", "cfg", "⚙"],
+  assistant_query: ["Assistente IA", "info", "?"],
+  invite: ["Usuários", "cfg", "＋"],
+  role_change: ["Usuários", "cfg", "⇄"],
+  user_removed: ["Usuários", "cfg", "−"],
+  license_installed: ["Licença", "ok", "★"],
+  support_bundle: ["Suporte", "cfg", "⇩"],
+  agent_cluster_created: ["Cluster", "cfg", "＋"],
+  agent_token_rotated: ["Cluster", "cfg", "↻"],
+};
+const JOURNAL_STATUS_LABELS = { aberta: "aberta", andamento: "em andamento", concluida: "concluída" };
+const JOURNAL_KIND_LABELS = { pendencia: "a pendência", nota: "a nota" };
+
+function auditActor(d) {
+  const who = d.executed_by || d.approver || d.rejector || d.by;
+  if (!who) return "Sistema";
+  const named = String(who).match(/^(.+?)\s*\(/);
+  if (named) return named[1];
+  return String(who).split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function auditRec(d) {
+  const rec = (state.recommendations || []).find((r) => r.id === d.rec_id);
+  const label = REC_TYPE_LABELS[d.type] || REC_TYPE_LABELS[rec?.type] || d.type || "recomendação";
+  let target = d.pool || rec?.pool;
+  const parts = target ? String(target).split("/") : [];
+  if (parts.length === 3) target = `${parts[2]} (${parts[0]})`;
+  return `<b>${escapeHtml(label)}</b>${target ? ` em <code>${escapeHtml(target)}</code>` : ""}`;
+}
+
+function describeAudit(e) {
+  const d = e.details || {};
+  const who = `<b>${escapeHtml(auditActor(d))}</b>`;
+  switch (e.event) {
+    case "evaluate": {
+      const n = d.recommendations ?? 0;
+      const src = d.source === "agent" || d.source === "ingest" ? " com dados do agente" : "";
+      const kept = d.decisions_kept ? ` · ${d.decisions_kept} decisões anteriores mantidas` : "";
+      return { text: `${who} rodou uma avaliação do cluster${src}: <b>${n}</b> ${n === 1 ? "recomendação" : "recomendações"}${kept}`,
+        tone: d.decision_allowed === false ? "warn" : null };
+    }
+    case "approve": return { text: `${who} aprovou ${auditRec(d)}` };
+    case "reject": return { text: `${who} rejeitou ${auditRec(d)}${d.reason ? ` — motivo: “${escapeHtml(d.reason)}”` : ""}` };
+    case "execute": {
+      const sim = /\[demo\]/.test(d.output || "") ? ' <span class="audit-tag">simulado</span>' : "";
+      return d.success
+        ? { text: `${who} executou ${auditRec(d)} com sucesso${sim}` }
+        : { text: `${who} tentou executar ${auditRec(d)}, mas <b>falhou</b>${sim}`, tone: "bad" };
+    }
+    case "journal_created": return { text: `${who} registrou ${JOURNAL_KIND_LABELS[d.kind] || "um item"} no diário: “${escapeHtml(d.title || "")}”` };
+    case "journal_updated": return { text: `${who} marcou um item do diário como <b>${escapeHtml(JOURNAL_STATUS_LABELS[d.status] || d.status || "atualizado")}</b>` };
+    case "journal_deleted": return { text: `${who} removeu um item do diário` };
+    case "alerts_sent": return { text: `${d.count || 0} ${d.count === 1 ? "alerta enviado" : "alertas enviados"} para os canais configurados` };
+    case "alert_settings": return { text: `${who} alterou as configurações de alerta${d.min_severity ? ` (severidade mínima: ${escapeHtml(d.min_severity)})` : ""}` };
+    case "cost_settings": return { text: d.machine_prices
+      ? `${who} atualizou a tabela de custos: ${d.machine_prices} tipo(s) de máquina${d.fixed_costs ? ` e ${d.fixed_costs} custo(s) fixo(s)` : ""}`
+      : `${who} alterou os custos de referência: R$ ${escapeHtml(d.cpu_month)}/vCPU e R$ ${escapeHtml(d.gb_month)}/GB por mês` };
+    case "assistant_config": return { text: `${who} configurou o Assistente IA${d.model ? ` (${escapeHtml(d.model)})` : ""}` };
+    case "assistant_query": return { text: `${who} perguntou ao Assistente IA: “${escapeHtml((d.question || "").slice(0, 120))}”` };
+    case "invite": return { text: `${who} convidou ${d.email ? `<b>${escapeHtml(d.email)}</b>` : "um usuário"} como ${escapeHtml(ROLE_LABELS[d.role] || d.role || "")}` };
+    case "role_change": return { text: `${who} alterou o perfil de um usuário para <b>${escapeHtml(ROLE_LABELS[d.role] || d.role || "")}</b>` };
+    case "user_removed": return { text: `${who} removeu um usuário` };
+    case "license_installed": return { text: `${who} instalou a licença <b>${escapeHtml(d.plan || "")}</b>${d.customer ? ` de ${escapeHtml(d.customer)}` : ""}` };
+    case "support_bundle": return { text: `${who} gerou um pacote de suporte` };
+    case "agent_cluster_created": return { text: `${who} cadastrou o cluster <b>${escapeHtml(d.cluster || "")}</b>` };
+    case "agent_token_rotated": return { text: `${who} gerou um novo token para o agente do cluster` };
+    default: return { text: `${who} · ${escapeHtml(e.event)}` };
+  }
+}
+
 function renderAudit(entries) {
   document.getElementById("audit-log").innerHTML = entries.length
-    ? entries.map((e) => `
+    ? entries.map((e) => {
+        const [cat, tone, icon] = AUDIT_META[e.event] || ["Evento", "cfg", "•"];
+        const { text, tone: override } = describeAudit(e);
+        const t = override || tone;
+        const d = e.details || {};
+        const extra = e.event === "execute" && d.output
+          ? `<pre class="audit-output">${escapeHtml(d.output)}</pre>` : "";
+        return `
         <div class="audit-entry">
-          <span class="audit-time">${formatDate(e.timestamp)}</span>
-          <span class="audit-event ${escapeHtml(e.event)}">${escapeHtml(e.event)}</span>
-          <span class="audit-details">${escapeHtml(JSON.stringify(e.details))}</span>
-        </div>
-      `).join("")
+          <span class="audit-icon t-${t}" aria-hidden="true">${icon}</span>
+          <div class="audit-main">
+            <div class="audit-line">${text}</div>
+            <div class="audit-meta">
+              <span class="audit-chip t-${t}">${escapeHtml(cat)}</span>
+              <span>${formatDate(e.timestamp)}</span>
+              ${d.cluster ? `<span>· ${escapeHtml(d.cluster)}</span>` : ""}
+            </div>
+            <details class="audit-raw">
+              <summary>Detalhes técnicos</summary>
+              ${extra}
+              <pre>${escapeHtml(JSON.stringify(d, null, 2))}</pre>
+            </details>
+          </div>
+        </div>`;
+      }).join("")
     : `<div class="empty-state"><p>Nenhum evento registrado</p></div>`;
 }
 
@@ -1025,6 +1220,12 @@ async function loadPodLogs() {
 
 async function loadStatus() {
   state.status = await API.get("/status");
+  const banner = document.getElementById("demo-banner");
+  banner.classList.toggle("hidden", !state.status.demo_only);
+  if (state.status.demo_only) {
+    banner.innerHTML = `<strong>Demonstração</strong> · empresa e cluster fictícios, nada aqui é um ambiente real.
+      ${state.status.demo_contact ? `Quer ver no seu cluster? <span class="demo-contact">${escapeHtml(state.status.demo_contact)}</span>` : ""}`;
+  }
   document.getElementById("company-name").textContent = state.status.company_name || state.user?.company_name || "";
   document.getElementById("header-company").textContent = state.status.company_name || state.user?.company_name || "";
   const activeCluster = state.clusters.find((item) => item.id === state.selectedClusterId);
@@ -1158,7 +1359,12 @@ document.getElementById("cluster-selector").addEventListener("change", async (ev
   state.podTotal = 0;
   state.podError = null;
   renderClusterPods();
+  if (chatHistory.length) {  // a conversa anterior era sobre outro cluster
+    chatHistory.length = 0;
+    renderChat();
+  }
   await refresh();
+  renderChat();
 });
 
 document.getElementById("pod-namespace-filter").addEventListener("change", async (event) => {
@@ -1406,12 +1612,13 @@ function renderExecutiveOverview() {
     </div>`;
 
   const k = ov.kpis || {};
-  const kpi = (label, value, sub, cls = "") => `
-    <div class="kpi"><span class="kpi-label">${label}</span><strong class="kpi-value ${cls}">${value}</strong><span class="kpi-sub">${sub}</span></div>`;
+  const kpi = (label, value, sub, cls = "", goto = "") => goto
+    ? `<button type="button" class="kpi kpi-link" data-kpi-goto="${goto}" title="Abrir a tela de custos"><span class="kpi-label">${label}</span><strong class="kpi-value ${cls}">${value}</strong><span class="kpi-sub">${sub}</span></button>`
+    : `<div class="kpi"><span class="kpi-label">${label}</span><strong class="kpi-value ${cls}">${value}</strong><span class="kpi-sub">${sub}</span></div>`;
   document.getElementById("ov-kpis").innerHTML = [
     kpi("Riscos ativos", k.risks ?? 0, k.risks_high ? `${k.risks_high} crítico(s)` : "nenhum crítico", k.risks_high ? "bad" : k.risks ? "warn" : "ok"),
     kpi("Economia potencial", k.savings_monthly === null || k.savings_monthly === undefined ? "—" : formatBRL(k.savings_monthly),
-      k.savings_monthly === null || k.savings_monthly === undefined ? "configure custos em Usuários e custos" : `por mês · ${k.savings_count} recomendação(ões)`, "ok"),
+      k.savings_monthly === null || k.savings_monthly === undefined ? "configure custos em Usuários e custos" : `por mês · ver detalhes em Custos →`, "ok", "costs"),
     kpi("Eficiência de CPU", k.cpu_efficiency_pct === null || k.cpu_efficiency_pct === undefined ? "—" : `${k.cpu_efficiency_pct}%`, "do reservado está em uso",
       k.cpu_efficiency_pct !== null && k.cpu_efficiency_pct < 30 ? "warn" : ""),
     kpi("Disponibilidade", k.pods_ok_pct === null || k.pods_ok_pct === undefined ? "—" : `${k.pods_ok_pct}%`, `pods saudáveis · ${k.nodes_ready}/${k.nodes_total} nodes Ready`,
@@ -1441,11 +1648,13 @@ function renderExecutiveOverview() {
       <div class="ov-item-text"><strong>${escapeHtml(REC_TYPE_LABELS[s.type] || s.type)}</strong><span>${escapeHtml(s.target || "")}</span></div>
       <button class="btn btn-ghost btn-sm" data-goto-rec="${escapeHtml(s.id || "")}">Revisar</button>
     </div>`).join("") : `<div class="ov-empty">${k.savings_monthly === null || k.savings_monthly === undefined
-      ? "Configure o custo por vCPU e GB em Usuários e custos para estimar economias."
+      ? "Cadastre o preço dos seus tipos de máquina em Usuários e custos para estimar economias."
       : "Nenhuma economia relevante identificada agora."}</div>`;
 }
 
 document.getElementById("tab-overview").addEventListener("click", (event) => {
+  const kg = event.target.closest("[data-kpi-goto]");
+  if (kg) return switchTab(kg.dataset.kpiGoto);
   const nodeBtn = event.target.closest("[data-risk-node]");
   if (nodeBtn) return showNodeDetail(nodeBtn.dataset.riskNode);
   const goto = event.target.closest("[data-risk-goto]");
@@ -1604,16 +1813,95 @@ document.getElementById("alert-test").addEventListener("click", async () => {
   }
 });
 
+function costMachineRow(m = {}) {
+  return `<div class="cost-row cost-row-machine">
+    <input class="cm-match" list="cost-machine-options" maxlength="120" placeholder="tipo de máquina, pool ou *" value="${escapeHtml(m.match || "")}" aria-label="Tipo de máquina">
+    <input class="cm-price" type="number" min="0" step="0.0001" placeholder="preço" value="${m.price ?? ""}" aria-label="Preço">
+    <select class="cm-unit" aria-label="Unidade"><option value="hour"${m.unit === "hour" ? " selected" : ""}>R$ por hora</option><option value="month"${m.unit !== "hour" ? " selected" : ""}>R$ por mês</option></select>
+    <span class="cm-month"></span>
+    <button class="btn btn-ghost btn-sm btn-icon" type="button" data-cost-remove title="Remover">✕</button>
+  </div>`;
+}
+
+function costFixedRow(f = {}) {
+  return `<div class="cost-row cost-row-fixed">
+    <input class="cf-name" maxlength="80" placeholder="ex.: Load balancer" value="${escapeHtml(f.name || "")}" aria-label="Descrição">
+    <input class="cf-monthly" type="number" min="0" step="0.01" placeholder="R$ por mês" value="${f.monthly ?? ""}" aria-label="Valor mensal">
+    <input class="cf-qty" type="number" min="1" step="1" placeholder="qtd" value="${f.qty ?? 1}" aria-label="Quantidade">
+    <span class="cm-month"></span>
+    <button class="btn btn-ghost btn-sm btn-icon" type="button" data-cost-remove title="Remover">✕</button>
+  </div>`;
+}
+
+function updateCostPreview() {
+  document.querySelectorAll(".cost-row-machine").forEach((row) => {
+    const price = Number(row.querySelector(".cm-price").value || 0);
+    const monthly = row.querySelector(".cm-unit").value === "hour" ? price * 730 : price;
+    row.querySelector(".cm-month").textContent = price ? `≈ ${formatBRL(monthly)}/mês por node` : "";
+  });
+  document.querySelectorAll(".cost-row-fixed").forEach((row) => {
+    const v = Number(row.querySelector(".cf-monthly").value || 0) * Number(row.querySelector(".cf-qty").value || 1);
+    row.querySelector(".cm-month").textContent = v ? `= ${formatBRL(v)}/mês` : "";
+  });
+}
+
+function renderCostDetected(machinePrices) {
+  const c = state.status?.latest_report?.cluster_cost;
+  const types = c?.machine_types || [];
+  const priced = new Set(machinePrices.map((m) => String(m.match).toLowerCase()));
+  document.getElementById("cost-machine-options").innerHTML = types.map((t) => `<option value="${escapeHtml(t)}">`).join("");
+  document.getElementById("cost-detected").innerHTML = types.length
+    ? `<span>No cluster ativo:</span> ${types.map((t) => priced.has(t.toLowerCase())
+        ? `<span class="chip chip-ok">✓ ${escapeHtml(t)}</span>`
+        : `<button type="button" class="chip chip-warn" data-cost-add="${escapeHtml(t)}" title="Adicionar preço">+ ${escapeHtml(t)} · sem preço</button>`).join(" ")}`
+    : "";
+}
+
 async function loadCosts() {
   try {
     const c = await API.get("/costs");
     document.getElementById("cost-cpu").value = c.cpu_month || "";
     document.getElementById("cost-gb").value = c.gb_month || "";
+    const machines = c.machine_prices || [];
+    document.getElementById("cost-machines").innerHTML = (machines.length ? machines : [{}]).map(costMachineRow).join("");
+    document.getElementById("cost-fixed").innerHTML = (c.fixed_costs || []).map(costFixedRow).join("");
+    renderCostDetected(machines);
+    updateCostPreview();
   } catch (e) { /* sem permissão */ }
 }
 
+document.getElementById("cost-add-machine").addEventListener("click", () => {
+  document.getElementById("cost-machines").insertAdjacentHTML("beforeend", costMachineRow());
+});
+document.getElementById("cost-add-fixed").addEventListener("click", () => {
+  document.getElementById("cost-fixed").insertAdjacentHTML("beforeend", costFixedRow());
+});
+document.getElementById("cost-panel").addEventListener("click", (event) => {
+  const rm = event.target.closest("[data-cost-remove]");
+  if (rm) { rm.closest(".cost-row").remove(); return; }
+  const add = event.target.closest("[data-cost-add]");
+  if (add) {
+    const empty = [...document.querySelectorAll(".cm-match")].find((i) => !i.value);
+    if (empty) empty.value = add.dataset.costAdd;
+    else document.getElementById("cost-machines").insertAdjacentHTML("beforeend", costMachineRow({ match: add.dataset.costAdd, unit: "hour" }));
+    add.remove();
+    document.querySelector(".cost-row-machine:last-child .cm-price")?.focus();
+  }
+});
+document.getElementById("cost-panel").addEventListener("input", updateCostPreview);
+
 document.getElementById("cost-form").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const machine_prices = [...document.querySelectorAll(".cost-row-machine")].map((row) => ({
+    match: row.querySelector(".cm-match").value.trim(),
+    price: Number(row.querySelector(".cm-price").value || 0),
+    unit: row.querySelector(".cm-unit").value,
+  })).filter((m) => m.match && m.price > 0);
+  const fixed_costs = [...document.querySelectorAll(".cost-row-fixed")].map((row) => ({
+    name: row.querySelector(".cf-name").value.trim() || "Custo fixo",
+    monthly: Number(row.querySelector(".cf-monthly").value || 0),
+    qty: Number(row.querySelector(".cf-qty").value || 1),
+  })).filter((f) => f.monthly > 0 && f.qty > 0);
   try {
     const res = await fetch("/api/costs", {
       method: "PUT",
@@ -1622,10 +1910,12 @@ document.getElementById("cost-form").addEventListener("submit", async (event) =>
       body: JSON.stringify({
         cpu_month: Number(document.getElementById("cost-cpu").value || 0),
         gb_month: Number(document.getElementById("cost-gb").value || 0),
+        machine_prices, fixed_costs,
       }),
     });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Erro ${res.status}`);
-    toast("Custos salvos. Faça uma Nova Avaliação para recalcular.", "success");
+    toast("Custos salvos. Clique em Nova Avaliação para recalcular.", "success");
+    await loadCosts();
   } catch (e) {
     toast(e.message, "error");
   }
@@ -1681,15 +1971,40 @@ document.getElementById("license-form").addEventListener("submit", async (event)
 
 const chatHistory = [];
 
+function activeClusterLabel() {
+  const sel = document.getElementById("cluster-selector");
+  const opt = sel && sel.selectedOptions && sel.selectedOptions[0];
+  return (opt && opt.textContent.trim()) || "ativo";
+}
+
 function renderChat() {
   const log = document.getElementById("chat-log");
   log.innerHTML = chatHistory.map((m) => `
     <div style="margin:8px 0;padding:10px 12px;border-radius:8px;background:${m.role === "user" ? "var(--bg-elevated, rgba(59,130,246,.12))" : "rgba(255,255,255,.04)"}">
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">${m.role === "user" ? "Você" : "Assistente"}${m.tools ? " · consultou: " + escapeHtml(m.tools.join(", ")) : ""}</div>
       <div style="white-space:pre-wrap">${escapeHtml(m.content)}</div>
-    </div>`).join("") || `<div class="empty-state"><p>Faça uma pergunta sobre o cluster ativo.</p></div>`;
+    </div>`).join("") || `<div class="empty-state"><p>Faça uma pergunta sobre o cluster <b>${escapeHtml(activeClusterLabel())}</b>.<br>
+      <span style="font-size:12px">Ao trocar o cluster ativo no topo, a conversa recomeça com os dados do novo cluster.</span></p></div>`;
   log.scrollTop = log.scrollHeight;
 }
+
+const AI_FIELD_HINTS = {
+  default: { base: "URL base (opcional)", basePh: "Ollama: http://ollama:11434/v1 · Azure: https://<recurso>.openai.azure.com/openai/deployments/<deploy>",
+    ver: "api-version (somente Azure)", verPh: "", model: "ex.: claude-sonnet-5-5 · gpt-4o · llama3.1", auth: true },
+  tess: { base: "ID do agente Tess", basePh: "ex.: 12345 (número do agente de chat na Tess)",
+    ver: "ID do workspace Tess", verPh: "ex.: 6789", model: "slug do modelo na Tess, ex.: tess-5", auth: false },
+};
+
+function updateAiFields() {
+  const h = AI_FIELD_HINTS[document.getElementById("ai-provider").value] || AI_FIELD_HINTS.default;
+  document.getElementById("ai-base-url-label").textContent = h.base;
+  document.getElementById("ai-base-url").placeholder = h.basePh;
+  document.getElementById("ai-api-version-label").textContent = h.ver;
+  document.getElementById("ai-api-version").placeholder = h.verPh;
+  document.getElementById("ai-model").placeholder = h.model;
+  document.getElementById("ai-auth-header-group").classList.toggle("hidden", !h.auth);
+}
+document.getElementById("ai-provider").addEventListener("change", updateAiFields);
 
 async function loadAssistantConfig() {
   renderChat();
@@ -1703,6 +2018,7 @@ async function loadAssistantConfig() {
   document.getElementById("ai-base-url").value = c.base_url || "";
   document.getElementById("ai-api-version").value = c.api_version || "";
   document.getElementById("ai-auth-header").value = c.auth_header || "bearer";
+  updateAiFields();
   document.getElementById("ai-config-status").textContent =
     (data.licensed ? "" : "Licença atual não inclui o assistente. ") +
     (c.model ? `Configurado: ${c.provider} · ${c.model}${c.has_key ? " · chave salva" : ""}` : "Não configurado");
@@ -1712,6 +2028,7 @@ document.getElementById("assistant-config-form").addEventListener("submit", asyn
   event.preventDefault();
   const body = Object.fromEntries(new FormData(event.currentTarget));
   for (const k of ["base_url", "api_version"]) if (!body[k]) body[k] = null;
+  if (body.provider === "tess") delete body.auth_header;
   if (!body.api_key) delete body.api_key;
   try {
     const res = await fetch("/api/assistant/config", {

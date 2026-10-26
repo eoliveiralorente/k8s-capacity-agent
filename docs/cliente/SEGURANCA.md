@@ -13,10 +13,14 @@
 - Segredos (chaves de API, URLs de webhook) ficam **cifrados** (Fernet) no banco.
 - Senhas de usuários: scrypt. Sessões: só o hash do token é armazenado.
 - A licença é validada **offline** (assinatura digital); não há chamada externa.
+- Preços de máquinas e custos cadastrados ficam só no banco local; só admins alteram.
 
 ## Assistente de IA
 
-- Desligado até um admin configurar. Usa a **chave de API do cliente** ou um modelo local (Ollama).
+- Desligado até um admin configurar. Usa a **chave de API do cliente**, no provedor que ele escolher
+  (Claude, OpenAI, Azure OpenAI, Gemini, Tess, OpenRouter ou compatível), ou um modelo local (Ollama),
+  sem dados saindo da empresa.
+- O que é enviado: resumo do cluster, nomes de pods e eventos, recomendações e a pergunta do usuário.
 - Antes de qualquer envio ao modelo, a ferramenta **mascara** tokens, senhas, chaves, e-mails,
   IPs, CPF e credenciais em URLs.
 - O assistente é **somente leitura**: não executa nenhuma ação no cluster.

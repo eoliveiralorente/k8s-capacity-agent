@@ -92,7 +92,8 @@ def build_overview(report):
     )
     savings_total = round(sum(r["estimated_monthly"] for r in savings_items), 2)
     costs_on = bool((summary.get("cost_settings") or {}).get("cpu_month")
-                    or (summary.get("cost_settings") or {}).get("gb_month"))
+                    or (summary.get("cost_settings") or {}).get("gb_month")
+                    or (report.get("cluster_cost") or {}).get("configured"))
 
     ready = sum(1 for n in nodes if n.get("ready"))
     pods = summary.get("pods") or 0
@@ -125,6 +126,8 @@ def build_overview(report):
             "risks": len(alerts),
             "risks_high": len(high),
             "savings_monthly": savings_total if costs_on else None,
+            "cost_monthly": (report.get("cluster_cost") or {}).get("total_monthly") if costs_on else None,
+            "idle_monthly": (report.get("cluster_cost") or {}).get("idle_monthly") if costs_on else None,
             "savings_count": len(savings_items),
             "cpu_efficiency_pct": efficiency,
             "nodes_ready": ready,

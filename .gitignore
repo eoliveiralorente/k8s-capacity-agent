@@ -27,3 +27,7 @@ kubeconfig*
 
 # Chave PÚBLICA de licença vai na imagem; a privada fica fora do repositório
 !licensing/public_key.pem
+
+# Licenças emitidas e kits de entrega (contêm dados do cliente)
+*.license.json
+/entregas/

@@ -119,6 +119,15 @@ def workload_recommendations(pods, container_metrics, controllers=None, hpas=Non
         return []
 
 
+def _cost_inputs(nodes, pods):
+    from analyzers.cluster_cost import build_cost_inputs
+
+    try:
+        return build_cost_inputs(nodes, pods)
+    except Exception:  # custo é complementar; nunca derruba a avaliação
+        return None
+
+
 def evaluate_cluster(data=None):
     if data is None:
         data = collect_cluster_data()
@@ -263,6 +272,7 @@ def evaluate_cluster(data=None):
         "unhealthy_pods": unhealthy[:100],
         "decision": decision,
         "node_pools": node_pools,
+        "cost_inputs": _cost_inputs(nodes, pods),
     }
 
 
@@ -340,6 +350,7 @@ def summarize_report_for_api(report):
         "nodes_usage": report.get("nodes_usage", []),
         "unhealthy_pods": report.get("unhealthy_pods", []),
         "stability": stability,
+        "cluster_cost": report.get("cluster_cost"),
     }
 
 
@@ -440,7 +451,8 @@ def run_evaluation(source="cli", actor=None):
     evaluation_id = new_evaluation_id()
 
     save_metric_samples(result["capacity"])
-    history = summarize_history(load_metric_samples(days=14))
+    metric_samples = load_metric_samples(days=14)
+    history = summarize_history(metric_samples)
     result["history"] = history
     result["recommendations"], result["suppressed_recommendations"] = apply_history(
         result["recommendations"], history
@@ -452,11 +464,24 @@ def run_evaluation(source="cli", actor=None):
     from analyzers.costs import apply_costs
     from tenant_context import current_tenant_id
 
+    from analyzers.cluster_cost import compute_cluster_cost
+
     cost_settings = get_cost_settings(current_tenant_id.get())
+    cost_inputs = result.pop("cost_inputs", None)
+    try:
+        cluster_cost = compute_cluster_cost(cost_inputs, cost_settings) if cost_inputs else None
+        if cluster_cost and cluster_cost.get("configured"):
+            from analyzers.cluster_cost import history_cost
+
+            cluster_cost["history"] = history_cost(cluster_cost, metric_samples)
+    except Exception:
+        cluster_cost = None
+    result["cluster_cost"] = cluster_cost
     result["summary"]["estimated_savings_monthly"] = apply_costs(
-        result["recommendations"], result["capacity"], cost_settings
+        result["recommendations"], result["capacity"], cost_settings, cluster_cost
     )
-    result["summary"]["cost_settings"] = cost_settings
+    result["summary"]["cost_settings"] = {k: cost_settings.get(k) for k in ("currency", "cpu_month", "gb_month")}
+    result["summary"]["cost_settings"]["machine_prices"] = len(cost_settings.get("machine_prices") or [])
 
     report = {
         "evaluation_id": evaluation_id,

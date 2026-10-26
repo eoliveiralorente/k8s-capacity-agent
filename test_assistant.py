@@ -123,5 +123,28 @@ class ConfigStoreTest(unittest.TestCase):
             self.assertEqual(account_store.increment_assistant_usage(admin["tenant_id"]), 2)
 
 
+class TessTest(unittest.TestCase):
+    def test_tess_sem_ferramentas_envia_contexto_e_headers(self):
+        from assistant import engine
+
+        run_tool = patch.object(engine, "run_tool", lambda name, args, ctx: '{"pods": [{"namespace": "loja", "name": "api-1"}]}')
+        run_tool.start()
+        self.addCleanup(run_tool.stop)
+        seen = {}
+
+        def transport(url, headers, body):
+            seen.update(url=url, headers=headers, body=body)
+            return {"choices": [{"message": {"content": "Diagnóstico: deploy quebrado"}}]}
+
+        config = {"provider": "tess", "model": "tess-5", "api_key": "k", "base_url": "123", "api_version": "77"}
+        answer, used = engine.ask(config, [{"role": "user", "content": "por que o pod cai?"}], {}, transport)
+        assert answer == "Diagnóstico: deploy quebrado"
+        assert seen["url"] == "https://api.tess.im/agents/123/openai/chat/completions"
+        assert seen["headers"] == {"Authorization": "Bearer k", "x-workspace-id": "77"}
+        assert seen["body"]["tools"] == "no-tools" and "DADOS DO CLUSTER" in seen["body"]["messages"][-1]["content"]
+        assert seen["body"]["messages"][-1]["content"].endswith("por que o pod cai?")
+        assert "detalhes_pod" in used
+
+
 if __name__ == "__main__":
     unittest.main()

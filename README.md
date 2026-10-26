@@ -24,7 +24,7 @@ e uma StorageClass padrão.
 
 ```bash
 helm upgrade --install capacity-agent \
-  https://github.com/eoliveiralorente/k8s-capacity-agent/releases/download/v1.0.0/capacity-agent-1.0.0.tgz \
+  https://github.com/eoliveiralorente/k8s-capacity-agent/releases/download/v1.1.0/capacity-agent-1.1.0.tgz \
   --namespace capacity-agent --create-namespace \
   --set clusterName="Produção"
 

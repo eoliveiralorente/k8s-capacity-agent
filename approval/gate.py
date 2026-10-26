@@ -104,6 +104,7 @@ def mark_executed(rec_id, result, executed_by=None):
         "success": result.get("success"),
         "executed_by": executed_by,
         "type": item["type"],
+        "pool": item.get("pool"),
         "output": result.get("output", "")[:500],
     })
 
