@@ -27,12 +27,13 @@ rsync -a --exclude .git --exclude .github --exclude '.venv*' --exclude __pycache
   --exclude '.capacity-agent*' --exclude '*.tar' --exclude '.env*' --exclude divulgacao --exclude entregas \
   "$SRC" "$REPO/"
 cd "$REPO"
-echo "Versão nos charts: $(sed -n 's/^appVersion: *//p' charts/capacity-agent/Chart.yaml)"
+APPV="$(sed -n 's/^appVersion: *//p' charts/capacity-agent/Chart.yaml | tr -d '"')"
+echo "Versão nos charts: $APPV (laboratório: $APPV-lab · demo: $APPV-demo)"
 
 if [ "$TARGET" = "tudo" ] || [ "$TARGET" = "kind" ]; then
   step "Laboratório no kind"
-  TAG="lab-$(date +%Y%m%d-%H%M%S)"
-  sudo docker build -q -t "capacity-agent:$TAG" --build-arg CAPACITY_AGENT_VERSION="$TAG" . >/dev/null
+  TAG="$APPV-lab-$(date +%Y%m%d-%H%M%S)"
+  sudo docker build -q -t "capacity-agent:$TAG" --build-arg CAPACITY_AGENT_VERSION="$APPV-lab" . >/dev/null
   kind get kubeconfig --name "$KIND_CLUSTER" > "$KCFG"
   NODE="$(kubectl --kubeconfig "$KCFG" get nodes -o jsonpath='{.items[0].metadata.name}')"
   case "$NODE" in "$KIND_CLUSTER"-*) ;; *) echo "Kubeconfig não é do kind ($NODE). Parando."; exit 1;; esac
@@ -45,7 +46,7 @@ fi
 
 if [ "$TARGET" = "tudo" ] || [ "$TARGET" = "demo" ]; then
   step "Demo no Docker (porta 8081)"
-  sudo CAPACITY_AGENT_PORT=8081 docker compose -p capacity-agent-v2 up -d --build
+  sudo CAPACITY_AGENT_PORT=8081 CAPACITY_AGENT_VERSION="$APPV-demo" docker compose -p capacity-agent-v2 up -d --build
   for _ in $(seq 1 30); do
     sudo -n docker compose -p capacity-agent-v2 exec -T capacity-agent \
       python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)" >/dev/null 2>&1 && break

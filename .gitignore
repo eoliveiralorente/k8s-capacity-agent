@@ -31,3 +31,5 @@ kubeconfig*
 # Licenças emitidas e kits de entrega (contêm dados do cliente)
 *.license.json
 /entregas/
+# Versão gravada pelo tools/atualizar_producao.sh na pasta da produção
+/VERSION

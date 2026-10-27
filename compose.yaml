@@ -1,6 +1,9 @@
 services:
   capacity-agent:
-    build: .
+    build:
+      context: .
+      args:
+        CAPACITY_AGENT_VERSION: ${CAPACITY_AGENT_VERSION:-dev}
     restart: unless-stopped
     init: true
     read_only: true

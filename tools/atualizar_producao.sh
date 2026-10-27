@@ -51,6 +51,10 @@ rsync -a --exclude .git --exclude .github --exclude '.venv*' --exclude __pycache
   --exclude '.capacity-agent*' --exclude '.env*' --exclude entregas --exclude divulgacao --exclude '*.tar' \
   "$SRC/" "$PROD/"
 
+APPV="$(sed -n 's/^appVersion: *//p' "$SRC/charts/capacity-agent/Chart.yaml" | tr -d '"')"
+printf '%s-prod\n' "$APPV" > "$PROD/VERSION"
+echo "  versão: $APPV-prod (aparece em Suporte → Saúde da instalação)"
+
 echo; echo "== 3/4 Dependências"
 PY="$PROD/.venv/bin/python3"
 if [ -x "$PY" ]; then "$PY" -m pip install -q -r "$PROD/requirements.txt" && echo "  ok"
