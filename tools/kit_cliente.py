@@ -10,6 +10,7 @@ Gera em entregas/<cliente>/ tudo o que o cliente precisa para instalar:
   - manifestos-<cliente>.yaml (instalação sem helm; gerado se houver helm nesta máquina)
   - GUIA_RAPIDO.md preenchido com os dados do cliente
   - ATUALIZACAO.md (como atualizar com um kit novo) e NOVIDADES.md (o changelog)
+  - TERMOS_DE_USO.md e PRIVACIDADE.md (o instalar.sh pede o aceite dos termos)
   - um .zip com tudo, pronto para enviar
 
 O TOKEN de leitura da imagem NÃO entra no kit: envie por outro canal (ex.: WhatsApp)
@@ -139,6 +140,8 @@ def build_kit(args):
     # Guia de atualização e novidades: o mesmo kit serve para instalar e para atualizar.
     update = (ROOT / "docs" / "cliente" / "ATUALIZACAO.md").read_text(encoding="utf-8")
     (out / "ATUALIZACAO.md").write_text(update.replace("<sua-empresa>", slug), encoding="utf-8")
+    for doc in ("TERMOS_DE_USO.md", "PRIVACIDADE.md"):
+        shutil.copyfile(ROOT / "docs" / "cliente" / doc, out / doc)
     changelog = ROOT / "CHANGELOG.md"
     if changelog.is_file():
         shutil.copyfile(changelog, out / "NOVIDADES.md")

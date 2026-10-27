@@ -52,7 +52,15 @@ if [ "$TARGET" = "tudo" ] || [ "$TARGET" = "demo" ]; then
     sleep 2
   done
   echo "Recriando os dados do demo (1 a 2 minutos)..."
-  sudo docker compose -p capacity-agent-v2 exec -T capacity-agent python agent.py demo --email "$DEMO_EMAIL" | head -2
+  # Saída num arquivo (sem pipe) e stdin fechado: um "| head" aqui deixava o docker compose exec preso.
+  DEMO_LOG="$(mktemp)"
+  if timeout 600 sudo docker compose -p capacity-agent-v2 exec -T capacity-agent \
+       python agent.py demo --email "$DEMO_EMAIL" </dev/null >"$DEMO_LOG" 2>&1; then
+    head -n 2 "$DEMO_LOG"
+  else
+    echo "A recriação do demo falhou ou passou de 10 minutos. Últimas linhas:"; tail -n 20 "$DEMO_LOG"
+  fi
+  rm -f "$DEMO_LOG"
   echo "Demo: http://127.0.0.1:8081"
 fi
 

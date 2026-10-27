@@ -61,6 +61,8 @@ else fail "helm não encontrado. Instale o helm 3.8+: https://helm.sh/docs/intro
 
 echo
 echo "2/5  Confirmação"
+echo "  Ao continuar, você declara que leu e concorda com os Termos de Uso (TERMOS_DE_USO.md)"
+echo "  e com a Política de Privacidade (PRIVACIDADE.md), que estão nesta pasta."
 CURRENT_IMAGE="$("${K[@]}" -n "$NAMESPACE" get deploy "$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
 if [ -n "$CURRENT_IMAGE" ]; then
   echo "  Já existe um Capacity Agent neste namespace (versão ${CURRENT_IMAGE##*:}). Os dados e a licença são mantidos."
@@ -69,6 +71,7 @@ else
   read -r -p "  Instalar o Capacity Agent __VERSION__ no cluster '$CTX', namespace '$NAMESPACE'? [s/N] " answer
 fi
 case "$answer" in s|S|sim|SIM) ;; *) echo "  Cancelado."; exit 1;; esac
+echo "  Termos de Uso e Política de Privacidade aceitos em $(date '+%d/%m/%Y %H:%M:%S') por $(whoami)@$(hostname) (cluster $CTX)."
 
 echo
 echo "3/5  Preparando o namespace e o acesso à imagem"

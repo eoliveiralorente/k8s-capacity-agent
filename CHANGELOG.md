@@ -1,5 +1,10 @@
 # Changelog
 
+## Kit de entrega — termos de uso e privacidade
+
+- O kit traz `TERMOS_DE_USO.md` e `PRIVACIDADE.md`. O `instalar.sh` avisa que continuar significa aceitar os
+  termos e grava no registro da instalação a data, o usuário e o cluster do aceite.
+
 ## v1.2.1 — correção na saúde da instalação
 
 - Suporte → Saúde da instalação: a linha "Licença" mostra AVISO, com o que fazer, quando não há licença,
