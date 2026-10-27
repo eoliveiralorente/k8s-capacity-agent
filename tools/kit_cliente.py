@@ -9,15 +9,17 @@ Gera em entregas/<cliente>/ tudo o que o cliente precisa para instalar:
     e, se algo falhar, mostra o motivo provável), desinstalar.sh e diagnostico.sh
   - manifestos-<cliente>.yaml (instalação sem helm; gerado se houver helm nesta máquina)
   - GUIA_RAPIDO.md preenchido com os dados do cliente
+  - ATUALIZACAO.md (como atualizar com um kit novo) e NOVIDADES.md (o changelog)
   - um .zip com tudo, pronto para enviar
 
 O TOKEN de leitura da imagem NÃO entra no kit: envie por outro canal (ex.: WhatsApp)
 e oriente o cliente a colar quando o instalar.sh pedir.
 
 Uso:
-  python3 tools/kit_cliente.py --customer "Empresa X" --version 1.1.0 --pilot
-  python3 tools/kit_cliente.py --customer "Empresa X" --version 1.1.0 --plan enterprise \
-      --clusters 3 --users 10 --days 365
+  python3 tools/kit_cliente.py --customer "Empresa X" --version 1.2.0 --pilot
+  python3 tools/kit_cliente.py --customer "Empresa X" --version 1.2.0 --plan profissional --days 365
+  python3 tools/kit_cliente.py --customer "Empresa X" --version 1.2.0 --plan enterprise \
+      --clusters 6 --users 50 --nodes 150 --days 365
 """
 import argparse
 import json
@@ -37,7 +39,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 REGISTRY = "ghcr.io"
 IMAGE = "ghcr.io/eoliveiralorente/k8s-capacity-agent"
 PULL_SECRET = "capacity-agent-pull"
-PILOT = {"plan": "enterprise", "clusters": 1, "users": 5, "days": 30}
+PILOT = {"plan": "enterprise", "clusters": 1, "users": 5, "days": 30, "nodes": 0}
 
 TEMPLATES = Path(__file__).resolve().parent / "kit_templates"
 
@@ -94,11 +96,12 @@ def build_kit(args):
     from license_tool import issue_license
 
     slug = args.slug or slugify(args.customer)
-    plan, clusters, users, days = args.plan, args.clusters, args.users, args.days
+    plan, clusters, users, days, nodes = args.plan, args.clusters, args.users, args.days, args.nodes
     if args.pilot:
-        plan, clusters, users, days = PILOT["plan"], PILOT["clusters"], PILOT["users"], PILOT["days"]
-    if not plan or not clusters or not users:
-        sys.exit("Informe --pilot ou --plan, --clusters e --users.")
+        plan, clusters, users, days, nodes = (PILOT["plan"], PILOT["clusters"], PILOT["users"], PILOT["days"],
+                                              PILOT["nodes"])
+    if not plan:
+        sys.exit("Informe --pilot ou --plan (essencial, profissional ou enterprise).")
 
     out = ROOT / "entregas" / slug
     if out.exists() and not args.force:
@@ -107,7 +110,9 @@ def build_kit(args):
         shutil.rmtree(out)
     out.mkdir(parents=True)
 
-    envelope, payload = issue_license(args.customer, plan, clusters, users, days)
+    envelope, payload = issue_license(args.customer, plan, clusters, users, days, nodes=nodes)
+    clusters, users = payload["max_clusters"], payload["max_users"]
+    nodes_txt = f" · até {payload['max_nodes']} nodes (média do mês)" if payload.get("max_nodes") else ""
     license_file = f"{slug}.license.json"
     (out / license_file).write_text(json.dumps(envelope, indent=2), encoding="utf-8")
 
@@ -131,13 +136,20 @@ def build_kit(args):
              .replace("{{SLUG}}", slug))
     (out / "GUIA_RAPIDO.md").write_text(guide, encoding="utf-8")
 
+    # Guia de atualização e novidades: o mesmo kit serve para instalar e para atualizar.
+    update = (ROOT / "docs" / "cliente" / "ATUALIZACAO.md").read_text(encoding="utf-8")
+    (out / "ATUALIZACAO.md").write_text(update.replace("<sua-empresa>", slug), encoding="utf-8")
+    changelog = ROOT / "CHANGELOG.md"
+    if changelog.is_file():
+        shutil.copyfile(changelog, out / "NOVIDADES.md")
+
     zip_path = out.parent / f"capacity-agent-{slug}-{args.version}.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
         for f in sorted(out.iterdir()):
             z.write(f, f"capacity-agent-{slug}/{f.name}")
 
     print(f"Kit de {args.customer} gerado em {out}")
-    print(f"  Plano {plan} · {clusters} cluster(s) · {users} usuário(s) · válido até {expires}")
+    print(f"  Plano {plan} · {clusters} cluster(s) · {users} usuário(s){nodes_txt} · válido até {expires}")
     print(f"  Arquivo para enviar: {zip_path}")
     if not manifests:
         print("  (sem manifestos para instalação sem helm: rode o kit numa máquina com helm)")
@@ -153,11 +165,12 @@ def main():
     p = argparse.ArgumentParser(description="Gera o kit de entrega de um cliente (uso do fornecedor)")
     p.add_argument("--customer", required=True, help='Nome do cliente, ex.: "Empresa X"')
     p.add_argument("--slug", help="Identificador curto (padrão: derivado do nome)")
-    p.add_argument("--version", required=True, help="Versão publicada da imagem, ex.: 1.1.0")
+    p.add_argument("--version", required=True, help="Versão publicada da imagem, ex.: 1.2.0")
     p.add_argument("--pilot", action="store_true", help="Piloto: enterprise, 1 cluster, 5 usuários, 30 dias")
-    p.add_argument("--plan", choices=["pro", "enterprise"])
-    p.add_argument("--clusters", type=int)
-    p.add_argument("--users", type=int)
+    p.add_argument("--plan", choices=["essencial", "profissional", "enterprise"])
+    p.add_argument("--clusters", type=int, help="Padrão: do plano")
+    p.add_argument("--users", type=int, help="Padrão: do plano")
+    p.add_argument("--nodes", type=int, help="Nodes contratados, média do mês (só aviso). Padrão: do plano; 0 = sem limite")
     p.add_argument("--days", type=int, default=365)
     p.add_argument("--cluster-name", help='Nome exibido no painel (padrão: "Produção")')
     p.add_argument("--registry-user", default="capacity-agent-bot",

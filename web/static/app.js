@@ -568,7 +568,7 @@ function renderOverviewStatus() {
   const ready = nodes.filter((n) => n.ready).length;
   const strip = document.getElementById("ov-strip");
   const statusEl = document.getElementById("ov-status");
-  if (!report) { strip.innerHTML = ""; statusEl.innerHTML = ""; return; }
+  if (!report || report.locked) { strip.innerHTML = ""; statusEl.innerHTML = ""; return; }
 
   const problems = summary.scheduling_issues ?? 0;
   strip.innerHTML = `
@@ -1218,6 +1218,40 @@ async function loadPodLogs() {
 
 // ── Data loading ────────────────────────────────────────────
 
+// Sem licença válida: só a visão geral (nota e número de riscos). As demais telas mostram o aviso.
+const LOCKED_TABS = ["recommendations", "capacity", "scheduling", "costs"];
+
+function lockCardHtml() {
+  const msg = state.status?.license_message || "Esta tela exige uma licença válida.";
+  return `<div class="license-lock-icon" aria-hidden="true">🔒</div>
+    <h3>Licença necessária</h3>
+    <p>${escapeHtml(msg)}</p>
+    ${can("admin") ? `<button class="btn btn-primary" type="button" data-lock-goto="users">Instalar licença</button>`
+                   : `<p class="license-lock-sub">Fale com o administrador do painel para renovar a licença.</p>`}`;
+}
+
+function applyLicenseLock() {
+  const locked = !!state.status?.license_locked;
+  document.body.classList.toggle("license-locked", locked);
+  LOCKED_TABS.forEach((tab) => {
+    const panel = document.getElementById(`tab-${tab}`);
+    if (!panel) return;
+    let card = panel.querySelector(":scope > .license-lock");
+    if (locked && !card) {
+      card = document.createElement("div");
+      card.className = "panel license-lock";
+      panel.prepend(card);
+    }
+    if (card) card.innerHTML = locked ? lockCardHtml() : "";
+    panel.classList.toggle("locked", locked);
+  });
+}
+
+document.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-lock-goto]");
+  if (btn) switchTab(btn.dataset.lockGoto);
+});
+
 async function loadStatus() {
   state.status = await API.get("/status");
   const banner = document.getElementById("demo-banner");
@@ -1226,6 +1260,7 @@ async function loadStatus() {
     banner.innerHTML = `<strong>Demonstração</strong> · empresa e cluster fictícios, nada aqui é um ambiente real.
       ${state.status.demo_contact ? `Quer ver no seu cluster? <span class="demo-contact">${escapeHtml(state.status.demo_contact)}</span>` : ""}`;
   }
+  applyLicenseLock();
   document.getElementById("company-name").textContent = state.status.company_name || state.user?.company_name || "";
   document.getElementById("header-company").textContent = state.status.company_name || state.user?.company_name || "";
   const activeCluster = state.clusters.find((item) => item.id === state.selectedClusterId);
@@ -1321,7 +1356,7 @@ async function loadClusters() {
 }
 
 async function loadRecommendations() {
-  if (!state.selectedClusterId) {
+  if (!state.selectedClusterId || state.status?.license_locked) {
     state.recommendations = [];
     return;
   }
@@ -1541,6 +1576,10 @@ function nodeLayer(label, use, req) {
 
 function renderNodesUsage() {
   const el = document.getElementById("nodes-usage");
+  if (state.status?.license_locked) {
+    el.innerHTML = `<div class="empty-state"><p>🔒 O mapa de nodes exige uma licença válida.</p></div>`;
+    return;
+  }
   const nodes = state.status?.latest_report?.nodes_usage || [];
   if (!nodes.length) {
     el.innerHTML = `<div class="empty-state"><p>Execute uma nova avaliação para ver o consumo por node</p></div>`;
@@ -1617,13 +1656,21 @@ function renderExecutiveOverview() {
     : `<div class="kpi"><span class="kpi-label">${label}</span><strong class="kpi-value ${cls}">${value}</strong><span class="kpi-sub">${sub}</span></div>`;
   document.getElementById("ov-kpis").innerHTML = [
     kpi("Riscos ativos", k.risks ?? 0, k.risks_high ? `${k.risks_high} crítico(s)` : "nenhum crítico", k.risks_high ? "bad" : k.risks ? "warn" : "ok"),
-    kpi("Economia potencial", k.savings_monthly === null || k.savings_monthly === undefined ? "—" : formatBRL(k.savings_monthly),
+    ov.locked ? kpi("Economia potencial", "🔒", "disponível com licença") : kpi("Economia potencial", k.savings_monthly === null || k.savings_monthly === undefined ? "—" : formatBRL(k.savings_monthly),
       k.savings_monthly === null || k.savings_monthly === undefined ? "configure custos em Usuários e custos" : `por mês · ver detalhes em Custos →`, "ok", "costs"),
     kpi("Eficiência de CPU", k.cpu_efficiency_pct === null || k.cpu_efficiency_pct === undefined ? "—" : `${k.cpu_efficiency_pct}%`, "do reservado está em uso",
       k.cpu_efficiency_pct !== null && k.cpu_efficiency_pct < 30 ? "warn" : ""),
     kpi("Disponibilidade", k.pods_ok_pct === null || k.pods_ok_pct === undefined ? "—" : `${k.pods_ok_pct}%`, `pods saudáveis · ${k.nodes_ready}/${k.nodes_total} nodes Ready`,
       (k.pods_ok_pct ?? 100) < 95 ? "warn" : "ok"),
   ].join("");
+
+  if (ov.locked) {
+    const lockHtml = `<div class="ov-empty license-lock-inline">🔒 ${escapeHtml(state.status?.license_message || "")}
+      ${can("admin") ? `<button class="btn btn-primary btn-sm" type="button" data-lock-goto="users">Instalar licença</button>` : ""}</div>`;
+    document.getElementById("ov-risks").innerHTML = lockHtml;
+    document.getElementById("ov-savings").innerHTML = `<div class="ov-empty">Disponível com licença.</div>`;
+    return;
+  }
 
   const risks = ov.top_risks || [];
   document.getElementById("ov-risks").innerHTML = risks.length ? risks.map((r, i) => {
@@ -1923,7 +1970,18 @@ document.getElementById("cost-form").addEventListener("submit", async (event) =>
 
 // ── Licença ─────────────────────────────────────────────────
 
-const PLAN_LABELS = { community: "Community", pro: "Pro", enterprise: "Enterprise" };
+const PLAN_LABELS = { community: "Sem licença", essencial: "Essencial", profissional: "Profissional",
+  enterprise: "Enterprise", pro: "Pro" };
+
+const LICENSE_STATES = { valid: "válida", grace: "em carência", expired: "vencida", invalid: "inválida", community: "sem licença" };
+
+function licenseNodesHtml(lic) {
+  const u = lic.node_usage;
+  const used = u && u.clusters ? `média de ${String(u.avg_nodes).replace(".", ",")} nos últimos ${u.days} dias · ${u.now_nodes} agora · pico ${u.peak_nodes}` : "sem histórico ainda";
+  if (!lic.max_nodes) return `sem limite · ${used}`;
+  return `até ${lic.max_nodes} (média do mês) · ${used}${lic.nodes_over
+    ? ` <span class="chip chip-warn">acima do contratado</span>` : ""}`;
+}
 
 async function loadLicense() {
   try {
@@ -1933,18 +1991,24 @@ async function loadLicense() {
   }
   const lic = state.license;
   const banner = document.getElementById("license-banner");
-  const warn = ["community", "grace", "expired", "invalid"].includes(lic.state) || (lic.days_left !== null && lic.days_left <= 30);
-  banner.classList.toggle("hidden", !warn || !can("admin"));
+  const warn = ["community", "grace", "expired", "invalid"].includes(lic.state) || (lic.days_left !== null && lic.days_left <= 30)
+    || lic.nodes_over;
+  banner.classList.toggle("hidden", !warn || !can("admin") || state.status?.demo_only);
+  const label = lic.plan_label || PLAN_LABELS[lic.plan] || lic.plan;
+  const nodesMsg = lic.nodes_over
+    ? ` O uso médio de nodes (${String(lic.node_usage.avg_nodes).replace(".", ",")}) passou do contratado (${lic.max_nodes}). Fale com o fornecedor para ajustar o plano.`
+    : "";
   document.getElementById("license-banner-text").innerHTML =
-    `<strong>Licença ${escapeHtml(PLAN_LABELS[lic.plan] || lic.plan)}:</strong> ${escapeHtml(lic.message)}`;
+    `<strong>${lic.plan === "community" ? "Licença" : `Licença ${escapeHtml(label)}`}:</strong> ${escapeHtml(lic.message + nodesMsg)}`;
   const features = (lic.features || []).map((f) => escapeHtml(lic.feature_labels?.[f] || f)).join(", ") || "—";
   const info = document.getElementById("license-info");
   if (info) {
     info.innerHTML = `
       <dl class="rec-detail">
-        <dt>Plano</dt><dd>${escapeHtml(PLAN_LABELS[lic.plan] || lic.plan)} (${escapeHtml(lic.state)})</dd>
+        <dt>Plano</dt><dd>${escapeHtml(lic.plan_label || PLAN_LABELS[lic.plan] || lic.plan)} (${escapeHtml(LICENSE_STATES[lic.state] || lic.state)})</dd>
         <dt>Cliente</dt><dd>${escapeHtml(lic.customer || "—")}</dd>
         <dt>Limites</dt><dd>${lic.max_clusters} cluster(s), ${lic.max_users} usuário(s)</dd>
+        <dt>Nodes</dt><dd>${licenseNodesHtml(lic)}</dd>
         <dt>Recursos</dt><dd>${features}</dd>
         <dt>Validade</dt><dd>${lic.expires_at ? formatDate(lic.expires_at) : "—"}</dd>
         <dt>Situação</dt><dd>${escapeHtml(lic.message)}</dd>
@@ -1962,6 +2026,7 @@ document.getElementById("license-form").addEventListener("submit", async (event)
     toast("Licença instalada", "success");
     form.reset();
     await loadLicense();
+    await refresh();
   } catch (e) {
     toast(e.message, "error");
   }

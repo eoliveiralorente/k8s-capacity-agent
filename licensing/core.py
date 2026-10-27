@@ -4,7 +4,7 @@ Formato do arquivo de licença (JSON):
   {"payload": "<base64 do JSON>", "signature": "<base64 da assinatura Ed25519>"}
 
 O payload contém: license_id, customer, plan, max_clusters, max_users,
-features, issued_at, expires_at. A assinatura é verificada com a chave pública
+max_nodes (opcional; aviso, não bloqueia), features, issued_at, expires_at. A assinatura é verificada com a chave pública
 embutida em licensing/public_key.pem — não há chamada externa.
 """
 import base64
@@ -21,9 +21,26 @@ COMMUNITY = {
     "customer": None,
     "max_clusters": 1,
     "max_users": 2,
+    "max_nodes": None,
     "features": [],
 }
 ALL_FEATURES = ("execution", "agent_mode", "alerts", "ai_assistant")
+
+# Planos comerciais: recursos e limites padrão de cada um (o fornecedor pode ajustar na emissão).
+PLANS = {
+    "essencial": {"features": ["execution"], "clusters": 1, "users": 10, "nodes": 20},
+    "profissional": {"features": ["execution", "alerts", "ai_assistant"], "clusters": 3, "users": 25, "nodes": 60},
+    "enterprise": {"features": list(ALL_FEATURES), "clusters": 10, "users": 100, "nodes": None},
+    "pro": {"features": ["execution", "alerts"], "clusters": 3, "users": 10, "nodes": None},  # licenças antigas
+}
+PLAN_LABELS = {"community": "Sem licença", "essencial": "Essencial", "profissional": "Profissional",
+               "enterprise": "Enterprise", "pro": "Pro"}
+
+# Sem licença válida (nenhuma, inválida ou vencida após a carência) o painel mostra só a visão
+# geral: nota de saúde e número de riscos. Detalhes, recomendações e custos pedem licença.
+LOCKED_STATES = ("community", "invalid", "expired")
+LOCKED_MESSAGE = ("Os detalhes, as recomendações e os custos exigem uma licença válida. "
+                  "Instale ou renove a licença em Usuários e custos → Licença.")
 FEATURE_LABELS = {
     "execution": "Aprovação e execução de recomendações",
     "agent_mode": "Clusters conectados via agente",
@@ -92,13 +109,13 @@ def license_status(now=None):
     now = now or datetime.now(timezone.utc)
     path = _license_file()
     base = {**COMMUNITY, "state": "community", "license_id": None, "expires_at": None,
-            "days_left": None, "message": "Sem licença: edição Community (1 cluster, 2 usuários)."}
+            "days_left": None, "message": "Sem licença instalada: só a visão geral fica disponível."}
     if not path.is_file():
         return base
     try:
         payload = verify_license_text(path.read_text(encoding="utf-8"))
     except (LicenseError, OSError, ValueError) as exc:
-        return {**base, "state": "invalid", "message": f"Licença inválida ({exc}). Usando Community."}
+        return {**base, "state": "invalid", "message": f"Licença inválida ({exc}). Só a visão geral fica disponível."}
 
     expires = datetime.fromisoformat(payload["expires_at"])
     if expires.tzinfo is None:
@@ -109,24 +126,37 @@ def license_status(now=None):
         "customer": payload["customer"],
         "max_clusters": int(payload["max_clusters"]),
         "max_users": int(payload["max_users"]),
+        "max_nodes": int(payload["max_nodes"]) if payload.get("max_nodes") else None,
         "features": [f for f in payload.get("features", []) if f in ALL_FEATURES],
         "license_id": payload["license_id"],
         "expires_at": payload["expires_at"],
         "days_left": days_left,
     }
     if now <= expires:
-        message = f"Licença {payload['plan']} para {payload['customer']}, válida até {expires.date().isoformat()}."
+        label = PLAN_LABELS.get(payload["plan"], payload["plan"])
+        message = f"Licença {label} para {payload['customer']}, válida até {expires.strftime('%d/%m/%Y')}."
         if days_left <= 30:
             message += f" Renove em até {days_left} dia(s)."
         return {**effective, "state": "valid", "message": message}
     if now <= expires + timedelta(days=GRACE_DAYS):
         grace_left = (expires + timedelta(days=GRACE_DAYS) - now).days
         return {**effective, "state": "grace",
-                "message": f"Licença vencida em {expires.date().isoformat()}. "
+                "message": f"Licença vencida em {expires.strftime('%d/%m/%Y')}. "
                            f"Período de carência: {grace_left} dia(s) para renovar."}
     return {**base, "state": "expired", "license_id": payload["license_id"],
             "customer": payload["customer"], "expires_at": payload["expires_at"],
-            "message": f"Licença vencida em {expires.date().isoformat()}. Usando Community; os dados continuam disponíveis."}
+            "message": f"Licença vencida em {expires.strftime('%d/%m/%Y')}. Só a visão geral fica disponível; "
+                       "os dados continuam guardados e voltam ao renovar."}
+
+
+def with_labels(status):
+    """Acrescenta o nome comercial do plano e se o painel está restrito."""
+    return {**status, "plan_label": PLAN_LABELS.get(status["plan"], status["plan"]),
+            "locked": status["state"] in LOCKED_STATES}
+
+
+def is_locked(status=None):
+    return (status or license_status())["state"] in LOCKED_STATES
 
 
 def has_feature(feature):

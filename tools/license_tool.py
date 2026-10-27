@@ -4,10 +4,14 @@
 NÃO vai na imagem entregue ao cliente. A chave privada fica só com você,
 fora do repositório (padrão: ~/.capacity-license/private.pem).
 
+Planos: essencial, profissional, enterprise (os limites e recursos padrão de cada um estão em
+licensing/core.py; --clusters, --users, --nodes e --features ajustam na emissão).
+
 Uso:
   python3 tools/license_tool.py keygen
-  python3 tools/license_tool.py issue --customer "Cliente X" --plan pro \
-      --clusters 3 --users 10 --days 365 --features execution,agent_mode,alerts -o cliente-x.license.json
+  python3 tools/license_tool.py issue --customer "Cliente X" --plan profissional --days 365 -o cliente-x.license.json
+  python3 tools/license_tool.py issue --customer "Cliente X" --plan enterprise \
+      --clusters 6 --users 50 --nodes 150 --days 365 -o cliente-x.license.json
   python3 tools/license_tool.py verify cliente-x.license.json
 """
 import argparse
@@ -26,10 +30,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey 
 
 DEFAULT_DIR = Path(os.getenv("CAPACITY_LICENSE_DIR", Path.home() / ".capacity-license"))
 REPO_PUBLIC_KEY = Path(__file__).resolve().parent.parent / "licensing" / "public_key.pem"
-PLANS = {
-    "pro": ["execution", "alerts"],
-    "enterprise": ["execution", "agent_mode", "alerts", "ai_assistant"],
-}
+from licensing.core import PLANS  # noqa: E402
 
 
 def cmd_keygen(args):
@@ -55,10 +56,19 @@ def _load_private():
     return serialization.load_pem_private_key(path.read_bytes(), password=None)
 
 
-def issue_license(customer, plan, clusters, users, days=365, features=None):
-    """Retorna (envelope assinado, payload). Usado pelo `issue` e pelo kit de entrega."""
+def issue_license(customer, plan, clusters=None, users=None, days=365, features=None, nodes=None):
+    """Retorna (envelope assinado, payload). Usado pelo `issue` e pelo kit de entrega.
+
+    Limites não informados vêm do plano. nodes=None mantém o padrão do plano; nodes=0 = sem limite.
+    """
+    if plan not in PLANS:
+        raise ValueError(f"Plano desconhecido: {plan}. Use: {', '.join(PLANS)}")
+    defaults = PLANS[plan]
     key = _load_private()
-    features = list(features) if features else PLANS.get(plan, [])
+    features = list(features) if features else list(defaults["features"])
+    clusters = clusters or defaults["clusters"]
+    users = users or defaults["users"]
+    nodes = defaults["nodes"] if nodes is None else (nodes or None)
     now = datetime.now(timezone.utc)
     payload = {
         "license_id": uuid.uuid4().hex[:12],
@@ -67,6 +77,7 @@ def issue_license(customer, plan, clusters, users, days=365, features=None):
         "max_clusters": clusters,
         "max_users": users,
         "features": features,
+        **({"max_nodes": nodes} if nodes else {}),
         "issued_at": now.isoformat(),
         "expires_at": (now + timedelta(days=days)).replace(microsecond=0).isoformat(),
     }
@@ -80,7 +91,8 @@ def issue_license(customer, plan, clusters, users, days=365, features=None):
 
 def cmd_issue(args):
     features = [f.strip() for f in args.features.split(",") if f.strip()] if args.features else None
-    envelope, payload = issue_license(args.customer, args.plan, args.clusters, args.users, args.days, features)
+    envelope, payload = issue_license(args.customer, args.plan, args.clusters, args.users, args.days, features,
+                                      args.nodes)
     Path(args.output).write_text(json.dumps(envelope, indent=2), encoding="utf-8")
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     print(f"\nLicença gravada em {args.output}")
@@ -101,9 +113,10 @@ def main():
     k.add_argument("--force", action="store_true")
     i = sub.add_parser("issue", help="Emite uma licença assinada")
     i.add_argument("--customer", required=True)
-    i.add_argument("--plan", choices=["pro", "enterprise"], required=True)
-    i.add_argument("--clusters", type=int, required=True)
-    i.add_argument("--users", type=int, required=True)
+    i.add_argument("--plan", choices=list(PLANS), required=True)
+    i.add_argument("--clusters", type=int, help="Padrão: do plano")
+    i.add_argument("--users", type=int, help="Padrão: do plano")
+    i.add_argument("--nodes", type=int, help="Nodes contratados (média do mês; só aviso). 0 = sem limite")
     i.add_argument("--days", type=int, default=365)
     i.add_argument("--features", help="Lista separada por vírgula (padrão: do plano)")
     i.add_argument("-o", "--output", required=True)

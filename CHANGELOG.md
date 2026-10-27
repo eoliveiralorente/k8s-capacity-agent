@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.2.0 — licença pronta para cobrar
+
+**Planos comerciais**
+- Planos `essencial`, `profissional` e `enterprise`, com recursos e limites padrão (`licensing/core.py`).
+  O painel mostra o nome comercial do plano. Licenças `pro` antigas continuam valendo.
+- `license_tool.py` e `kit_cliente.py` aceitam só `--plan`; `--clusters`, `--users`, `--nodes` e `--features` são opcionais.
+
+**Sem licença válida, só a visão geral**
+- Sem licença, com licença inválida ou vencida após os 14 dias de carência, o painel mostra só a nota de saúde e o
+  número de riscos. Recomendações, nodes, pods, capacidade, custos e relatório pedem licença (HTTP 402).
+- Os dados continuam sendo coletados e voltam assim que a licença é instalada. O pacote e o cluster de
+  demonstração não são afetados.
+
+**Limite de nodes como aviso**
+- Campo opcional `max_nodes` na licença. A tela de licença mostra a média de nodes dos últimos 30 dias (todos os
+  clusters, acompanhando o autoscaling), o total atual e o pico, com aviso quando a média passa do contratado.
+  Não bloqueia nada: serve de base para ajustar o plano na renovação.
+
+**Painel**
+- Botões de "Instalar licença" e "Gerar link de convite" com tamanho normal, numa linha de ações com uma dica.
+- Listas de seleção dos formulários com o mesmo visual dos outros campos.
+
+**Instalação e atualização**
+- O `instalar.sh` reconhece uma instalação existente e pergunta "Atualizar da versão X para a Y?". Não pede
+  o token de novo e mantém dados e licença.
+- O kit traz `ATUALIZACAO.md` (atualizar, voltar versão, backup e restauração) e `NOVIDADES.md`.
+- Ensaio de instalação para o fornecedor: `tools/ensaio_kind.sh` e `docs/ENSAIO_INSTALACAO.md`.
+
 ## v1.1.0 — custo do cluster por node
 
 **Custos** (nova tela "Custos"; o card "Economia potencial" da Visão Geral leva até ela)

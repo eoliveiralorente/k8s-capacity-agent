@@ -62,6 +62,8 @@ acompanha o autoscaling) aparece depois de 24 h de coleta.
 - **Permissões:** leitura de nodes, pods, eventos, workloads, HPAs e métricas. Escrita só se você
   ligar `allowRightsizing`, e sempre depois de aprovação.
 - **Dados:** ficam no volume do seu cluster. Segredos são cifrados, e a licença é validada offline.
+- **Licença:** avisa 30 dias antes de vencer e tem 14 dias de carência. Depois disso o painel mostra só a visão
+  geral até a renovação; nenhum dado é perdido.
 - **IA:** desligada até um admin configurar. Antes de qualquer envio, tokens, senhas, IPs e
   e-mails são mascarados, e a IA nunca executa nada.
 - **Contêiner:** sem root, sistema de arquivos somente leitura e sem capabilities.

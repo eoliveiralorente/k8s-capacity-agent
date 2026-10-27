@@ -660,6 +660,7 @@ tr:hover td { background: var(--bg-hover); }
 }
 
 .form-group input,
+.form-group select,
 .form-group textarea {
   width: 100%;
   background: var(--bg);
@@ -673,6 +674,7 @@ tr:hover td { background: var(--bg-hover); }
 .form-group textarea { resize: vertical; min-height: 80px; }
 
 .form-group input:focus,
+.form-group select:focus,
 .form-group textarea:focus {
   outline: none;
   border-color: var(--primary);
@@ -1389,3 +1391,21 @@ tr.rec-focus td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
   .sidebar .nav-section, .sidebar .sidebar-footer, .sidebar .nav-link { display: none; }
   .sidebar .nav-item { white-space: nowrap; width: auto; padding: 8px 12px; margin: 0; flex: none; }
 }
+
+/* ── Licença: painel restrito ─────────────────────────────── */
+.tab-panel.locked > :not(.license-lock) { display: none !important; }
+.license-lock {
+  max-width: 560px;
+  margin: 48px auto;
+  padding: 32px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.license-lock h3 { margin: 0; font-size: 1.25rem; }
+.license-lock p { margin: 0; color: var(--text-muted, #9aa4b2); line-height: 1.5; }
+.license-lock-icon { font-size: 2.2rem; }
+.license-lock-sub { font-size: .9rem; }
+.license-lock-inline { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }

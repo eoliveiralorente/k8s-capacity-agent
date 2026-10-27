@@ -590,3 +590,56 @@ def list_active_alerts():
             "SELECT key, severity, title, first_seen, last_sent FROM alert_state "
             "WHERE tenant_id = ? AND cluster_id = ? ORDER BY first_seen", (tenant_id, cluster_id)).fetchall()
     return [dict(row) for row in rows]
+
+
+NODE_USAGE_MAX_GAP_H = 2.0
+
+
+def installation_node_usage(days=30, now=None):
+    """Nodes em uso na instalação inteira (todos os clusters), para conferir com a licença.
+
+    Para cada cluster soma os pools de cada amostra e faz a média ponderada pelo tempo
+    (cada amostra vale até a próxima, no máximo 2 h). Retorna a soma das médias, o total
+    atual e o pico do período.
+    """
+    from collections import defaultdict
+    from datetime import timedelta
+
+    now = now or datetime.now(timezone.utc)
+    since = (now - timedelta(days=days)).isoformat()
+    with _transaction() as connection:
+        rows = connection.execute(
+            "SELECT cluster_id, timestamp, SUM(node_count) AS nodes FROM metric_samples "
+            "WHERE timestamp >= ? GROUP BY cluster_id, timestamp ORDER BY cluster_id, timestamp",
+            (since,),
+        ).fetchall()
+
+    series = defaultdict(list)
+    for row in rows:
+        ts = datetime.fromisoformat(row["timestamp"])
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        series[row["cluster_id"]].append((ts, float(row["nodes"] or 0)))
+
+    avg_total = now_total = 0.0
+    peak_total = 0
+    hours_seen = 0.0
+    for points in series.values():
+        weighted = hours = 0.0
+        for i, (ts, count) in enumerate(points):
+            nxt = points[i + 1][0] if i + 1 < len(points) else now
+            w = max(0.0, min((nxt - ts).total_seconds() / 3600, NODE_USAGE_MAX_GAP_H))
+            weighted, hours = weighted + count * w, hours + w
+        if hours:
+            avg_total += weighted / hours
+            hours_seen = max(hours_seen, hours)
+        now_total += points[-1][1]
+        peak_total += int(max(c for _, c in points))
+    return {
+        "days": days,
+        "clusters": len(series),
+        "avg_nodes": round(avg_total, 1),
+        "now_nodes": int(now_total),
+        "peak_nodes": peak_total,
+        "hours_covered": round(hours_seen, 1),
+    }

@@ -4,12 +4,14 @@
 #   ./instalar.sh                      usa o contexto atual do kubectl
 #   KUBE_CONTEXT=meu-ctx ./instalar.sh  escolhe o contexto
 #   NAMESPACE=outro ./instalar.sh       muda o namespace (padrão: capacity-agent)
+#   RELEASE=outro-nome ./instalar.sh    segunda instalação no mesmo cluster (padrão: capacity-agent)
 #
 # Instalação somente leitura. Usa o helm se estiver instalado; senão, aplica os manifestos com kubectl.
 set -uo pipefail
 cd "$(dirname "$0")"
 
 NAMESPACE="${NAMESPACE:-capacity-agent}"
+RELEASE="${RELEASE:-capacity-agent}"
 LOG="instalacao-$(date +%Y%m%d-%H%M%S).log"
 exec > >(tee -a "$LOG") 2>&1
 
@@ -45,6 +47,11 @@ if "${K[@]}" get storageclass -o jsonpath='{range .items[*]}{.metadata.annotatio
   ok "StorageClass padrão encontrada"
 else warn "nenhuma StorageClass padrão: defina persistence.storageClassName em values-__SLUG__.yaml"; fi
 
+OTHER_NS="$("${K[@]}" get clusterrole "$RELEASE-read" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null || true)"
+if [ -n "$OTHER_NS" ] && [ "$OTHER_NS" != "$NAMESPACE" ]; then
+  fail "já existe um Capacity Agent neste cluster (namespace $OTHER_NS). Para atualizar, rode com NAMESPACE=$OTHER_NS; para uma segunda instalação, use também RELEASE=outro-nome"
+else ok "nenhuma instalação conflitante"; fi
+
 USE_HELM=0
 if command -v helm >/dev/null; then USE_HELM=1; ok "helm encontrado (instalação via helm)"
 elif [ -f manifestos-__SLUG__.yaml ]; then ok "sem helm: vou aplicar os manifestos com kubectl"
@@ -54,7 +61,13 @@ else fail "helm não encontrado. Instale o helm 3.8+: https://helm.sh/docs/intro
 
 echo
 echo "2/5  Confirmação"
-read -r -p "  Instalar o Capacity Agent no cluster '$CTX', namespace '$NAMESPACE'? [s/N] " answer
+CURRENT_IMAGE="$("${K[@]}" -n "$NAMESPACE" get deploy "$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
+if [ -n "$CURRENT_IMAGE" ]; then
+  echo "  Já existe um Capacity Agent neste namespace (versão ${CURRENT_IMAGE##*:}). Os dados e a licença são mantidos."
+  read -r -p "  Atualizar para a versão __VERSION__ no cluster '$CTX', namespace '$NAMESPACE'? [s/N] " answer
+else
+  read -r -p "  Instalar o Capacity Agent __VERSION__ no cluster '$CTX', namespace '$NAMESPACE'? [s/N] " answer
+fi
 case "$answer" in s|S|sim|SIM) ;; *) echo "  Cancelado."; exit 1;; esac
 
 echo
@@ -81,16 +94,17 @@ fi
 echo
 echo "4/5  Instalando"
 if [ "$USE_HELM" -eq 1 ]; then
-  "${H[@]}" upgrade --install capacity-agent ./__CHART_FILE__ --namespace "$NAMESPACE" \
+  "${H[@]}" upgrade --install "$RELEASE" ./__CHART_FILE__ --namespace "$NAMESPACE" \
     -f values-__SLUG__.yaml --set encryption.existingSecret=capacity-agent-encryption || { fail "helm falhou"; exit 1; }
 else
+  [ "$RELEASE" = "capacity-agent" ] || { fail "sem helm, só é possível instalar com RELEASE=capacity-agent"; exit 1; }
   sed "s/namespace: capacity-agent$/namespace: $NAMESPACE/" manifestos-__SLUG__.yaml | "${K[@]}" -n "$NAMESPACE" apply -f - || { fail "kubectl apply falhou"; exit 1; }
 fi
 ok "recursos aplicados"
 
 echo
 echo "5/5  Aguardando o painel ficar pronto (até 4 min)"
-if "${K[@]}" -n "$NAMESPACE" rollout status deploy/capacity-agent --timeout=240s; then
+if "${K[@]}" -n "$NAMESPACE" rollout status "deploy/$RELEASE" --timeout=240s; then
   ok "Capacity Agent rodando"
 else
   fail "o painel não ficou pronto. Diagnóstico:"
@@ -100,7 +114,7 @@ else
     *ImagePull*|*ErrImage*) echo "  → A imagem não foi baixada: o token pode estar errado ou expirado. Rode:"
                             echo "    kubectl -n $NAMESPACE delete secret __PULL_SECRET__   e depois ./instalar.sh de novo";;
     *Unschedulable*)        echo "  → O pod não coube em nenhum node ou o volume não foi criado. Veja os eventos abaixo.";;
-    *CrashLoop*)            echo "  → O contêiner está reiniciando. Logs:"; "${K[@]}" -n "$NAMESPACE" logs deploy/capacity-agent --tail=30;;
+    *CrashLoop*)            echo "  → O contêiner está reiniciando. Logs:"; "${K[@]}" -n "$NAMESPACE" logs "deploy/$RELEASE" --tail=30;;
   esac
   "${K[@]}" -n "$NAMESPACE" get events --sort-by=.lastTimestamp | tail -15
   echo
@@ -111,7 +125,7 @@ fi
 cat <<NEXT
 
 Pronto! Próximos passos:
-  1. Abra o painel:  kubectl -n $NAMESPACE port-forward svc/capacity-agent 8080:80
+  1. Abra o painel:  kubectl -n $NAMESPACE port-forward svc/$RELEASE 8080:80
      e acesse http://localhost:8080
   2. Clique em "Criar conta" (essa conta vira o administrador).
   3. Usuários e custos → Licença: instale o arquivo __LICENSE_FILE__

@@ -413,7 +413,10 @@
                 <label for="license-file">Instalar licença (arquivo .license.json recebido do fornecedor)</label>
                 <input id="license-file" type="file" accept=".json,application/json" required>
               </div>
-              <button class="btn btn-primary" type="submit">Instalar licença</button>
+              <div class="cluster-form-actions">
+                <span class="form-hint">A licença é conferida aqui mesmo, sem conexão com o fornecedor. As telas se liberam na hora.</span>
+                <button class="btn btn-primary" type="submit">Instalar licença</button>
+              </div>
             </form>
           </div>
         </div>
@@ -433,7 +436,10 @@
                 <label for="invite-email">E-mail do colega (opcional, restringe o convite)</label>
                 <input id="invite-email" name="email" type="email" maxlength="254">
               </div>
-              <button class="btn btn-primary" type="submit">Gerar link de convite</button>
+              <div class="cluster-form-actions">
+                <span class="form-hint">O link vale por 7 dias e pode ser usado uma vez.</span>
+                <button class="btn btn-primary" type="submit">Gerar link de convite</button>
+              </div>
             </form>
             <div id="invite-result"></div>
           </div>

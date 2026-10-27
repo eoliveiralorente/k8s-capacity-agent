@@ -80,7 +80,8 @@ from tenant_context import (
     current_user,
 )
 
-from licensing.core import LicenseError, check_limit, has_feature, license_status, require_feature, save_license_text
+from licensing.core import (LOCKED_MESSAGE, LicenseError, check_limit, has_feature, is_locked, license_status,
+                             require_feature, save_license_text, with_labels)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -90,6 +91,55 @@ def _license_guard(fn, *args):
         fn(*args)
     except LicenseError as exc:
         raise HTTPException(status_code=402, detail=str(exc)) from exc
+
+
+def _panel_locked():
+    """Sem licença válida o painel fica restrito à visão geral.
+
+    Não vale para dados fictícios: o pacote de demonstração e o cluster de demonstração.
+    """
+    if DEMO_ONLY or not is_locked():
+        return False
+    from support.demo_exec import is_demo_cluster
+
+    return not is_demo_cluster()
+
+
+def _require_license():
+    if _panel_locked():
+        raise HTTPException(status_code=402, detail=LOCKED_MESSAGE)
+
+
+def _locked_report(report):
+    """Visão geral resumida: nota, situação e quantidade de riscos, sem os detalhes."""
+    if not report:
+        return None
+    ov = report.get("overview") or {}
+    k = ov.get("kpis") or {}
+    risks, high = k.get("risks") or 0, k.get("risks_high") or 0
+    if high:
+        headline = f"{high} risco(s) crítico(s) encontrado(s) na última avaliação"
+    elif risks:
+        headline = f"{risks} ponto(s) de atenção encontrado(s) na última avaliação"
+    else:
+        headline = "Nenhum risco ativo na última avaliação"
+    return {
+        "locked": True,
+        "evaluation_id": report.get("evaluation_id"),
+        "cluster": report.get("cluster"),
+        "created_at": report.get("created_at"),
+        "overview": {
+            "locked": True,
+            "score": ov.get("score"),
+            "status": ov.get("status"),
+            "headline": headline,
+            "explanation": LOCKED_MESSAGE,
+            "factors": [],
+            "kpis": {key: k.get(key) for key in ("risks", "risks_high", "nodes_ready", "nodes_total", "pods_ok_pct")},
+            "top_risks": [],
+            "top_savings": [],
+        },
+    }
 
 
 class ApproveRequest(BaseModel):
@@ -487,7 +537,17 @@ class LicenseUpload(BaseModel):
 
 @app.get("/api/license")
 def api_license():
-    status = license_status()
+    from approval.store import installation_node_usage
+
+    status = with_labels(license_status())
+    if DEMO_ONLY:
+        status["locked"] = False
+    try:
+        usage = installation_node_usage()
+    except Exception:  # o uso de nodes é informativo; nunca derruba a tela de licença
+        usage = None
+    status["node_usage"] = usage
+    status["nodes_over"] = bool(usage and status.get("max_nodes") and usage["avg_nodes"] > status["max_nodes"])
     status["feature_labels"] = {
         "execution": "Aprovação e execução", "agent_mode": "Modo agente",
         "alerts": "Alertas", "ai_assistant": "Assistente de IA",
@@ -504,7 +564,7 @@ def api_upload_license(body: LicenseUpload):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     append_audit("license_installed", {"license_id": payload["license_id"], "plan": payload["plan"],
                                        "customer": payload["customer"], "by": _actor()})
-    return license_status()
+    return with_labels(license_status())
 
 
 @app.get("/api/auth/setup")
@@ -842,6 +902,10 @@ def api_status():
         latest_report = summarize_report_for_api(report)
         evaluation_id = report.get("evaluation_id", evaluation_id)
 
+    locked = _panel_locked()
+    if locked:
+        latest_report = _locked_report(latest_report)
+
     provider = current_cluster_provider.get() or KUBERNETES_PROVIDER
     user = current_user.get() or {}
     return {
@@ -858,11 +922,14 @@ def api_status():
         "latest_report": latest_report,
         "demo_only": DEMO_ONLY,
         "demo_contact": DEMO_CONTACT if DEMO_ONLY else "",
+        "license_locked": locked,
+        "license_message": LOCKED_MESSAGE if locked else "",
     }
 
 
 @app.get("/api/cluster")
 def api_cluster():
+    _require_license()
     if not current_cluster_id.get():
         raise HTTPException(status_code=409, detail="Cadastre ou selecione um cluster")
     if current_cluster_mode.get() == "agent":
@@ -890,6 +957,7 @@ def api_cluster():
 
 @app.get("/api/cluster/nodes/{node_name}")
 def api_cluster_node_detail(node_name: str):
+    _require_license()
     from analyzers.node_detail import build_node_detail
 
     if not current_cluster_id.get():
@@ -917,6 +985,7 @@ def api_cluster_node_detail(node_name: str):
 
 @app.get("/api/cluster/pods")
 def api_cluster_pods(namespace: str | None = None):
+    _require_license()
     if not current_cluster_id.get():
         raise HTTPException(status_code=409, detail="Cadastre ou selecione um cluster")
     try:
@@ -949,6 +1018,7 @@ def api_cluster_pod_logs(
     container: str | None = None,
     previous: bool = False,
 ):
+    _require_license()
     if not current_cluster_id.get():
         raise HTTPException(status_code=409, detail="Cadastre ou selecione um cluster")
     if current_cluster_mode.get() == "agent":
@@ -986,6 +1056,7 @@ def api_cluster_pod_logs(
 
 @app.get("/api/stability")
 def api_stability():
+    _require_license()
 
     report = load_latest_report()
 
@@ -1006,6 +1077,7 @@ def api_stability():
 
 @app.get("/api/recommendations")
 def api_recommendations(status: str | None = None):
+    _require_license()
 
     evaluation_id, items = list_by_status(status)
 
@@ -1023,6 +1095,7 @@ def api_reports():
 
 @app.get("/api/reports/{evaluation_id}")
 def api_report(evaluation_id: str):
+    _require_license()
 
     try:
         report = load_report(evaluation_id)
@@ -1121,6 +1194,7 @@ def api_execute(rec_id: str, body: ExecuteRequest):
 
 @app.get("/api/executive-report")
 def api_executive_report_latest():
+    _require_license()
 
     report = load_latest_report()
 
@@ -1132,6 +1206,7 @@ def api_executive_report_latest():
 
 @app.get("/api/executive-report/{evaluation_id}")
 def api_executive_report(evaluation_id: str):
+    _require_license()
 
     try:
         report = load_report(evaluation_id)
