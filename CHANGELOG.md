@@ -1,5 +1,18 @@
 # Changelog
 
+## Kit de entrega — instalador com teste de storage
+
+Correções que vieram de uma instalação real em cliente:
+- **Testa o storage antes de instalar:** cria um volume de 1 GiB e um pod mínimo, espera o volume ficar pronto e
+  apaga tudo (inclusive o volume no provedor). Se falhar, nada é instalado e o erro é explicado em português:
+  cota esgotada, StorageClass inexistente, tipo de volume inválido, zona, permissão do driver ou driver parado.
+- **Opções novas:** `--storage-class=<nome>`, `--storage-local` (dados no disco de um node via local-path, para
+  avaliação) e `--pular-teste-storage`. `--help` lista todas.
+- **Tentativa anterior com volume pendente:** o volume vazio é recriado com a StorageClass atual.
+- Na atualização, com o volume já em uso, o teste de storage é pulado.
+- Funciona com `bash instalar.sh`, mesmo se o arquivo perdeu a permissão de execução no download.
+- Acha o chart como `.tgz` ou como pasta extraída.
+
 ## v1.3.0 — instalação gratuita e pedido de teste no painel
 
 - **Instalação grátis em um comando**, sem token: o chart é publicado como pacote OCI no GHCR a cada release

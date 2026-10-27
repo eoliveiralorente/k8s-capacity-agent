@@ -11,7 +11,7 @@ Nenhum dado é enviado ao fornecedor.
 - Kubernetes 1.27+ (qualquer cloud ou on-premises), `kubectl` e `helm` 3.8+ com acesso de admin
   **só durante a instalação**.
 - **metrics-server** funcionando: `kubectl top nodes` precisa responder.
-- StorageClass padrão para um volume de 2 GiB.
+- Uma StorageClass que crie volumes (2 GiB). O instalador testa isso antes de instalar.
 - O **token de acesso à imagem**, enviado separadamente pelo fornecedor.
 
 ## 2. Instalar (5 min)
@@ -20,14 +20,29 @@ Descompacte o kit e rode, com o `kubectl` apontando para o cluster certo:
 
 ```bash
 cd capacity-agent-{{SLUG}}
-./instalar.sh
+bash instalar.sh
 ```
 
-O script verifica o ambiente (acesso, versão, permissões, metrics-server, StorageClass), confirma o
-cluster, pede o token (ele não aparece na tela e não é gravado em arquivo) e instala com helm, ou com
+Use `bash instalar.sh`: funciona mesmo se o arquivo perdeu a permissão de execução ao descompactar.
+
+O script verifica o ambiente (acesso, versão, permissões, metrics-server, StorageClass), **testa se o
+cluster consegue criar um volume** (cria um de 1 GiB e apaga em seguida), confirma o cluster, pede o token (ele não aparece na tela e não é gravado em arquivo) e instala com helm, ou com
 kubectl se você não tiver helm. Se algo falhar, ele mostra o motivo provável e grava um registro
 `instalacao-*.log` para enviar ao suporte. Outros scripts do kit: `diagnostico.sh` (coleta
 informações sem segredos) e `desinstalar.sh`.
+
+### Se o storage falhar
+
+O instalador para **antes de instalar qualquer coisa** e explica a causa (cota do provedor esgotada,
+StorageClass inexistente, driver de storage parado, zona ou permissão). As opções:
+
+| Situação | O que fazer |
+|---|---|
+| O cluster tem outra StorageClass que funciona | `bash instalar.sh --storage-class=<nome>` (veja as opções com `kubectl get storageclass`) |
+| Não há StorageClass padrão | Marque uma como padrão: `kubectl patch storageclass <nome> -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'` |
+| Cota de disco do provedor esgotada | Peça mais cota ao provedor ou use outra StorageClass |
+| Só para avaliar, sem storage do provedor | O instalador oferece guardar os dados no disco de um node (local-path). Para aceitar sem pergunta: `bash instalar.sh --storage-local`. Se o node for recriado, o histórico se perde |
+| O cluster bloqueia o volume de teste | `bash instalar.sh --pular-teste-storage` |
 
 ## 3. Primeiro acesso (5 min)
 
@@ -71,7 +86,7 @@ acompanha o autoscaling) aparece depois de 24 h de coleta.
 ## 6. Para remover
 
 ```bash
-./desinstalar.sh
+bash desinstalar.sh
 ```
 
 ## Suporte

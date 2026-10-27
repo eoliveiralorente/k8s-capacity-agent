@@ -22,7 +22,7 @@ para o cluster certo:
 
 ```bash
 cd capacity-agent-<sua-empresa>
-./instalar.sh
+bash instalar.sh
 ```
 
 O instalador percebe que já existe uma instalação e pergunta *"Atualizar para a versão X?"*. Digite `s`.
@@ -30,7 +30,7 @@ O instalador percebe que já existe uma instalação e pergunta *"Atualizar para
 - **O token não é pedido de novo**: ele já está guardado no cluster.
 - **A licença não precisa ser reinstalada**: ela continua valendo até a data dela.
 - Se você instalou com outro namespace ou nome, rode como da primeira vez, por exemplo
-  `NAMESPACE=meu-namespace ./instalar.sh`.
+  `NAMESPACE=meu-namespace bash instalar.sh`.
 
 ## Atualizar direto com Helm ou ArgoCD
 
@@ -55,7 +55,7 @@ instalação**, confira que a versão mudou e que tudo está `OK`.
 
 | O que aparece | O que fazer |
 |---|---|
-| A imagem não foi baixada (`ImagePullBackOff`) | O token pode ter vencido. Peça um novo ao fornecedor, rode `kubectl -n capacity-agent delete secret capacity-agent-pull` e depois `./instalar.sh` de novo |
+| A imagem não foi baixada (`ImagePullBackOff`) | O token pode ter vencido. Peça um novo ao fornecedor, rode `kubectl -n capacity-agent delete secret capacity-agent-pull` e depois `bash instalar.sh` de novo |
 | O pod não sobe e você quer voltar | Use o rollback abaixo |
 | Qualquer outro problema | Rode `./diagnostico.sh` e envie o arquivo gerado ao suporte |
 
