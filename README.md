@@ -22,9 +22,12 @@ GCP, OCI, OpenStack/SaveInCloud ou on-premises) e entrega:
 Requisitos: Kubernetes 1.27+, `helm` 3.8+, metrics-server (`kubectl top nodes` funcionando)
 e uma StorageClass padrão.
 
+Grátis e sem token: sem licença, o painel mostra a nota de saúde e o número de riscos. Para ver
+os detalhes, as recomendações e os custos, peça a licença de teste de 30 dias no próprio painel.
+
 ```bash
 helm upgrade --install capacity-agent \
-  https://github.com/eoliveiralorente/k8s-capacity-agent/releases/download/v1.2.1/capacity-agent-1.2.1.tgz \
+  oci://ghcr.io/eoliveiralorente/charts/capacity-agent --version 1.3.0 \
   --namespace capacity-agent --create-namespace \
   --set clusterName="Produção"
 

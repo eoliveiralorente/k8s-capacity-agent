@@ -53,6 +53,8 @@ spec:
               value: {{ .Values.sampleMinutes | quote }}
             - name: CAPACITY_AGENT_EVALUATE_MINUTES
               value: {{ .Values.evaluateMinutes | quote }}
+            - name: CAPACITY_AGENT_TRIAL_URL
+              value: {{ .Values.trialUrl | quote }}
             {{- if .Values.publicUrl }}
             - name: CAPACITY_AGENT_PUBLIC_URL
               value: {{ .Values.publicUrl | quote }}

@@ -547,6 +547,7 @@ def api_license():
     except Exception:  # o uso de nodes é informativo; nunca derruba a tela de licença
         usage = None
     status["node_usage"] = usage
+    status["trial_url"] = TRIAL_URL if status.get("locked") else ""
     status["nodes_over"] = bool(usage and status.get("max_nodes") and usage["avg_nodes"] > status["max_nodes"])
     status["feature_labels"] = {
         "execution": "Aprovação e execução", "agent_mode": "Modo agente",
@@ -880,6 +881,11 @@ def api_delete_cluster(cluster_id: str):
 
 DEMO_ONLY = os.getenv("CAPACITY_AGENT_DEMO_ONLY", "").lower() in ("1", "true", "yes")
 DEMO_CONTACT = os.getenv("CAPACITY_AGENT_DEMO_CONTACT", "")
+# Botão "Pedir teste grátis de 30 dias" (painel sem licença). Só http(s); vazio esconde o botão.
+DEFAULT_TRIAL_URL = "https://wa.me/5511947229481?text=Ol%C3%A1!%20Quero%20testar%20o%20Capacity%20Agent%20por%2030%20dias."
+TRIAL_URL = os.getenv("CAPACITY_AGENT_TRIAL_URL", DEFAULT_TRIAL_URL).strip()
+if not re.match(r"^https?://", TRIAL_URL):
+    TRIAL_URL = ""
 
 
 def _demo_only_guard():
@@ -924,6 +930,7 @@ def api_status():
         "demo_contact": DEMO_CONTACT if DEMO_ONLY else "",
         "license_locked": locked,
         "license_message": LOCKED_MESSAGE if locked else "",
+        "trial_url": TRIAL_URL if locked else "",
     }
 
 

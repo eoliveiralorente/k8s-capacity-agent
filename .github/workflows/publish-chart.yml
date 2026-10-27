@@ -1,0 +1,41 @@
+name: Publish Helm chart
+
+# Publica os charts como pacotes OCI no GHCR a cada release (tag vX.Y.Z), para a instalação em um comando:
+#   helm install capacity-agent oci://ghcr.io/<dono>/charts/capacity-agent --version X.Y.Z \
+#     -n capacity-agent --create-namespace
+# Na primeira vez, deixe o pacote "charts/capacity-agent" público em GitHub → Packages → Package settings.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  chart:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Empacotar e publicar
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          mkdir -p dist
+          for chart in charts/capacity-agent charts/capacity-collector; do
+            helm package "$chart" --version "$VERSION" --app-version "$VERSION" -d dist
+          done
+          echo "$GHCR_TOKEN" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for pkg in dist/*.tgz; do
+            helm push "$pkg" "oci://ghcr.io/${OWNER}/charts"
+          done
+          echo "Instalar: helm install capacity-agent oci://ghcr.io/${OWNER}/charts/capacity-agent --version ${VERSION} -n capacity-agent --create-namespace"

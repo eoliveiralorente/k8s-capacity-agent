@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.3.0 — instalação gratuita e pedido de teste no painel
+
+- **Instalação grátis em um comando**, sem token: o chart é publicado como pacote OCI no GHCR a cada release
+  (`helm install capacity-agent oci://ghcr.io/eoliveiralorente/charts/capacity-agent`). Sem licença, o
+  painel mostra a nota de saúde e o número de riscos.
+- **Botão "Pedir teste grátis de 30 dias"** nas telas bloqueadas, na visão geral e na tela de licença. O link
+  é configurável no chart (`trialUrl`); vazio esconde o botão.
+
 ## Kit de entrega — termos de uso e privacidade
 
 - O kit traz `TERMOS_DE_USO.md` e `PRIVACIDADE.md`. O `instalar.sh` avisa que continuar significa aceitar os

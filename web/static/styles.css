@@ -1409,3 +1409,6 @@ tr.rec-focus td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
 .license-lock-icon { font-size: 2.2rem; }
 .license-lock-sub { font-size: .9rem; }
 .license-lock-inline { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.license-lock-actions { display: inline-flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; }
+.license-trial { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 14px; }
+a.btn, a.btn:hover { text-decoration: none; }

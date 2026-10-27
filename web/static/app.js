@@ -1221,13 +1221,23 @@ async function loadPodLogs() {
 // Sem licença válida: só a visão geral (nota e número de riscos). As demais telas mostram o aviso.
 const LOCKED_TABS = ["recommendations", "capacity", "scheduling", "costs"];
 
+function trialLinkHtml(url, cls = "btn btn-primary") {
+  if (!url || !/^https?:\/\//.test(url)) return "";
+  return `<a class="${cls}" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Pedir teste grátis de 30 dias</a>`;
+}
+
 function lockCardHtml() {
   const msg = state.status?.license_message || "Esta tela exige uma licença válida.";
+  const trial = trialLinkHtml(state.status?.trial_url);
+  const install = can("admin")
+    ? `<button class="btn ${trial ? "btn-ghost" : "btn-primary"}" type="button" data-lock-goto="users">Já tenho a licença</button>`
+    : "";
   return `<div class="license-lock-icon" aria-hidden="true">🔒</div>
     <h3>Licença necessária</h3>
     <p>${escapeHtml(msg)}</p>
-    ${can("admin") ? `<button class="btn btn-primary" type="button" data-lock-goto="users">Instalar licença</button>`
-                   : `<p class="license-lock-sub">Fale com o administrador do painel para renovar a licença.</p>`}`;
+    <p class="license-lock-sub">Com o teste grátis você vê cada risco, as recomendações e os custos do seu cluster por 30 dias.</p>
+    <div class="license-lock-actions">${trial}${install}</div>
+    ${can("admin") ? "" : `<p class="license-lock-sub">Fale com o administrador do painel para instalar a licença.</p>`}`;
 }
 
 function applyLicenseLock() {
@@ -1666,7 +1676,8 @@ function renderExecutiveOverview() {
 
   if (ov.locked) {
     const lockHtml = `<div class="ov-empty license-lock-inline">🔒 ${escapeHtml(state.status?.license_message || "")}
-      ${can("admin") ? `<button class="btn btn-primary btn-sm" type="button" data-lock-goto="users">Instalar licença</button>` : ""}</div>`;
+      <span class="license-lock-actions">${trialLinkHtml(state.status?.trial_url, "btn btn-primary btn-sm")}
+      ${can("admin") ? `<button class="btn btn-ghost btn-sm" type="button" data-lock-goto="users">Já tenho a licença</button>` : ""}</span></div>`;
     document.getElementById("ov-risks").innerHTML = lockHtml;
     document.getElementById("ov-savings").innerHTML = `<div class="ov-empty">Disponível com licença.</div>`;
     return;
@@ -2012,7 +2023,8 @@ async function loadLicense() {
         <dt>Recursos</dt><dd>${features}</dd>
         <dt>Validade</dt><dd>${lic.expires_at ? formatDate(lic.expires_at) : "—"}</dd>
         <dt>Situação</dt><dd>${escapeHtml(lic.message)}</dd>
-      </dl>`;
+      </dl>
+      ${lic.trial_url ? `<div class="license-trial">${trialLinkHtml(lic.trial_url)}<span class="form-hint">Receba uma licença de teste com todos os recursos por 30 dias.</span></div>` : ""}`;
   }
 }
 

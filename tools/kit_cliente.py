@@ -17,9 +17,9 @@ O TOKEN de leitura da imagem NÃO entra no kit: envie por outro canal (ex.: What
 e oriente o cliente a colar quando o instalar.sh pedir.
 
 Uso:
-  python3 tools/kit_cliente.py --customer "Empresa X" --version 1.2.1 --pilot
-  python3 tools/kit_cliente.py --customer "Empresa X" --version 1.2.1 --plan profissional --days 365
-  python3 tools/kit_cliente.py --customer "Empresa X" --version 1.2.1 --plan enterprise \
+  python3 tools/kit_cliente.py --customer "Empresa X" --version 1.3.0 --pilot
+  python3 tools/kit_cliente.py --customer "Empresa X" --version 1.3.0 --plan profissional --days 365
+  python3 tools/kit_cliente.py --customer "Empresa X" --version 1.3.0 --plan enterprise \
       --clusters 6 --users 50 --nodes 150 --days 365
 """
 import argparse
@@ -168,7 +168,7 @@ def main():
     p = argparse.ArgumentParser(description="Gera o kit de entrega de um cliente (uso do fornecedor)")
     p.add_argument("--customer", required=True, help='Nome do cliente, ex.: "Empresa X"')
     p.add_argument("--slug", help="Identificador curto (padrão: derivado do nome)")
-    p.add_argument("--version", required=True, help="Versão publicada da imagem, ex.: 1.2.1")
+    p.add_argument("--version", required=True, help="Versão publicada da imagem, ex.: 1.3.0")
     p.add_argument("--pilot", action="store_true", help="Piloto: enterprise, 1 cluster, 5 usuários, 30 dias")
     p.add_argument("--plan", choices=["essencial", "profissional", "enterprise"])
     p.add_argument("--clusters", type=int, help="Padrão: do plano")

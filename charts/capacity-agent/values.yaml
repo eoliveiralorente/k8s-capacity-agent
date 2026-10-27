@@ -23,6 +23,10 @@ evaluateMinutes: 60
 # URL pública do painel (usada nos links dos alertas). Ex.: https://capacity.cliente.com.br
 publicUrl: ""
 
+# Link do botão "Pedir teste grátis de 30 dias", que aparece no painel quando não há licença válida.
+# Vazio esconde o botão.
+trialUrl: "https://wa.me/5511947229481?text=Ol%C3%A1!%20Quero%20testar%20o%20Capacity%20Agent%20por%2030%20dias."
+
 # E-mail dos alertas (SMTP). A senha vem de um Secret com a chave "password".
 smtp:
   host: ""
