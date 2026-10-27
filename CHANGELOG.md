@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.2.1 — correção na saúde da instalação
+
+- Suporte → Saúde da instalação: a linha "Licença" mostra AVISO, com o que fazer, quando não há licença,
+  quando ela está vencida, inválida, em carência ou a 30 dias ou menos do fim. Antes aparecia OK sem licença.
+
 ## v1.2.0 — licença pronta para cobrar
 
 **Planos comerciais**

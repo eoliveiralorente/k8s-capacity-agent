@@ -37,6 +37,16 @@ class SupportTest(unittest.TestCase):
         self.assertTrue({"Banco de dados", "Chave de criptografia", "Licença", "kubectl"} <= names)
         self.assertIn(result["status"], ("ok", "aviso", "erro"))
 
+    def test_license_check_levels(self):
+        base = {"plan": "profissional", "message": "m", "days_left": 200}
+        self.assertEqual(health._license_check({**base, "state": "valid"})["status"], "ok")
+        self.assertEqual(health._license_check({**base, "state": "valid", "days_left": 10})["status"], "aviso")
+        self.assertEqual(health._license_check({**base, "state": "grace"})["status"], "aviso")
+        for state in ("community", "expired", "invalid"):
+            check = health._license_check({**base, "plan": "community", "state": state, "days_left": None})
+            self.assertEqual(check["status"], "aviso")
+            self.assertIn("Licença", check["hint"])
+
     def test_bundle_has_no_secrets(self):
         logbuffer.install()
         logging.getLogger("capacity-agent").warning("token=abcdefghijklmnopqrstuvwxyz0123 do usuario eu@x.com")

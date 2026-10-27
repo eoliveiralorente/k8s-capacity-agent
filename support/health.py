@@ -15,6 +15,26 @@ def _check(name, ok, detail, hint=None, level=None):
     return {"name": name, "status": level or ("ok" if ok else "erro"), "detail": detail, "hint": hint}
 
 
+def _license_check(lic):
+    """Licença válida = ok. Sem licença, vencida, inválida, em carência ou perto do fim = aviso com o que fazer."""
+    from licensing.core import PLAN_LABELS, is_locked
+
+    label = PLAN_LABELS.get(lic["plan"], lic["plan"])
+    detail = f"{label}: {lic['message']}"
+    if os.getenv("CAPACITY_AGENT_DEMO_ONLY", "").lower() in ("1", "true", "yes"):
+        return _check("Licença", True, "demonstração (dados fictícios, sem licença)")
+    if is_locked(lic):
+        hint = ("Peça a licença ao fornecedor e instale em Usuários e custos → Licença. "
+                "Até lá, só a visão geral fica disponível.")
+        return _check("Licença", False, detail, hint, "aviso")
+    if lic["state"] == "grace":
+        return _check("Licença", False, detail, "Renove agora: depois da carência o painel fica restrito à visão geral",
+                      "aviso")
+    if lic.get("days_left") is not None and lic["days_left"] <= 30:
+        return _check("Licença", False, detail, "Peça a renovação ao fornecedor", "aviso")
+    return _check("Licença", True, detail)
+
+
 def _kubectl(args, timeout=15):
     from collectors.kubernetes import _run_process
 
@@ -54,11 +74,7 @@ def run_checks(include_cluster=True):
         checks.append(_check("Chave de criptografia", False, str(exc)[:200],
                              "Veja 'Chave de criptografia inválida' em Solução de problemas"))
 
-    lic = license_status()
-    checks.append(_check("Licença", lic["state"] in ("valid", "community"),
-                         f"{lic['plan']} ({lic['state']}): {lic['message']}",
-                         "Instale/renove a licença em Usuários → Licença",
-                         None if lic["state"] in ("valid", "community") else "aviso"))
+    checks.append(_license_check(license_status()))
 
     ok, out = _kubectl(["version", "--client", "-o", "yaml"])
     checks.append(_check("kubectl", ok, out.splitlines()[1].strip() if ok and len(out.splitlines()) > 1 else out))
