@@ -29,6 +29,12 @@ def _fmt_brl(value):
     return f"R$ {text}"
 
 
+def _first_sentence(text):
+    """Primeira frase de uma recomendação (o que fazer), sem motivo, base e efeitos."""
+    head = (text or "").split(". ")[0].strip()
+    return head if head.endswith(".") else head + "."
+
+
 def _cluster_efficiency(nodes):
     """CPU em uso / CPU reservada (requests), só nodes de trabalho com métrica."""
     used = req = 0.0
@@ -74,6 +80,8 @@ def build_overview(report):
     efficiency = _cluster_efficiency(nodes)
     if efficiency is not None and efficiency < 30:
         penalty(10, f"baixa eficiência: só {efficiency}% da CPU reservada é usada")
+    elif efficiency is not None and efficiency > 100:
+        penalty(10, f"uso de CPU acima do reservado ({efficiency}%): risco de disputa de CPU")
     elif efficiency is not None and efficiency > 90:
         penalty(10, f"CPU reservada quase toda em uso ({efficiency}%)")
 
@@ -106,15 +114,19 @@ def build_overview(report):
     elif medium or rec_alerts:
         first = (medium or rec_alerts)[0]
         headline = "Cluster operando, com pontos de atenção"
-        explanation = first["title"] + ". " + first["detail"]
+        explanation = first["title"] + ". " + (_first_sentence(first["detail"]) if first["key"].startswith("rec:")
+                                               else first["detail"])
     elif savings_total > 0 and costs_on:
         headline = f"Cluster saudável, com {_fmt_brl(savings_total)}/mês de economia possível"
         explanation = "Nenhum risco ativo. As maiores economias estão listadas abaixo, prontas para aprovação."
     else:
         headline = "Cluster saudável"
         explanation = "Nenhum risco ativo encontrado na última avaliação."
-    if efficiency is not None:
-        explanation += f" Eficiência de CPU: {efficiency}% do reservado está em uso."
+    if efficiency is not None and efficiency > 100:
+        explanation += (f" Uso de CPU acima do reservado: {efficiency}% dos requests."
+                        " Os pods usam mais CPU do que reservaram e podem disputar CPU no node.")
+    elif efficiency is not None:
+        explanation += f" Uso da CPU reservada: {efficiency}%."
 
     return {
         "score": score,

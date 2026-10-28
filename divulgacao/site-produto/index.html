@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capacity Agent — a nota de saúde do seu cluster Kubernetes</title>
+<meta name="description" content="O Capacity Agent roda dentro do seu cluster Kubernetes e aponta riscos, falta de capacidade e desperdício antes que virem incidente. Somente leitura, com aprovação e auditoria. Teste grátis por 30 dias.">
+<meta property="og:title" content="Capacity Agent — a nota de saúde do seu cluster Kubernetes">
+<meta property="og:description" content="Riscos, capacidade e custo do seu cluster em 15 minutos. Roda no seu ambiente, somente leitura. Teste grátis por 30 dias.">
+<meta property="og:type" content="website">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="header">
+  <div class="wrap">
+    <a class="brand" href="#topo">
+      <span class="brand-mark" aria-hidden="true">CA</span>
+      <span class="brand-name"><strong>Capacity Agent</strong><span>por OTERA TECH</span></span>
+    </a>
+    <nav class="nav" aria-label="Principal">
+      <a href="#como-funciona">Como funciona</a>
+      <a href="#produto">O que mostra</a>
+      <a href="#planos">Planos</a>
+      <a href="blog/">Blog</a>
+      <a class="btn btn-primary" href="#teste">Teste grátis</a>
+    </nav>
+  </div>
+</header>
+
+<main id="topo">
+
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-text">
+      <p class="eyebrow">Para times de DevOps, SRE e plataforma</p>
+      <h1>A nota de saúde do seu cluster Kubernetes, em 15 minutos.</h1>
+      <p class="lead">O Capacity Agent roda dentro do seu cluster e aponta riscos, falta de capacidade e desperdício antes que virem incidente. E diz o que fazer, em que ordem, com aprovação e auditoria em cada mudança.</p>
+      <div class="btn-row">
+        <a class="btn btn-primary" href="#teste">Testar grátis por 30 dias</a>
+        <a class="btn btn-ghost" href="#video">Ver a demonstração</a>
+      </div>
+      <ul class="checks">
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2.5" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>Roda dentro do seu cluster</li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2.5" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>Somente leitura</li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2.5" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>Qualquer cloud ou on-premises</li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2.5" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>Nenhum dado sai do seu ambiente</li>
+      </ul>
+    </div>
+
+    <div class="panel" aria-label="Exemplo do painel, com dados fictícios">
+      <div class="panel-top"><span>Visão geral · prod-loja</span><span class="mono">exemplo</span></div>
+      <div class="score">
+        <svg width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="Nota de saúde 61 de 100">
+          <circle cx="60" cy="60" r="50" fill="none" stroke="#22304A" stroke-width="12"/>
+          <circle cx="60" cy="60" r="50" fill="none" stroke="#F59E0B" stroke-width="12" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="122" transform="rotate(-90 60 60)"/>
+          <text x="60" y="66" text-anchor="middle" font-size="30" font-weight="700" fill="#E8EDF5" font-family="IBM Plex Sans, Arial, sans-serif">61</text>
+          <text x="60" y="84" text-anchor="middle" font-size="11" fill="#9AA8BD" font-family="IBM Plex Sans, Arial, sans-serif">de 100</text>
+        </svg>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <span class="chip">Atenção</span>
+          <strong style="font-size:20px;line-height:1.3">1 risco crítico exige ação agora</strong>
+          <span class="muted" style="font-size:15px">Pool sem folga para perder um node</span>
+        </div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><span>Riscos ativos</span><strong style="color:#F87171">6</strong></div>
+        <div class="kpi"><span>Nodes ociosos</span><strong style="color:#FBBF24">4</strong></div>
+        <div class="kpi"><span>Pods saudáveis</span><strong style="color:#34D399">93%</strong></div>
+      </div>
+      <p class="note">Cada risco vem com a explicação, a recomendação e o comando para corrigir e para reverter.</p>
+    </div>
+  </div>
+</section>
+
+<section id="como-funciona" class="section section-alt">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Teste no seu cluster antes de decidir</h2>
+      <p class="lead">Sem cartão e sem compromisso. Você só assina se a ferramenta ajudar o seu time.</p>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <span class="step">PASSO 1</span>
+        <h3>Peça o teste de 30 dias</h3>
+        <p>Você recebe a licença e o kit de instalação em até 1 dia útil. A instalação leva cerca de 15 minutos, com Helm ou só kubectl, e pode ser feita junto com a gente por chamada.</p>
+      </div>
+      <div class="card">
+        <span class="step">PASSO 2</span>
+        <h3>Veja o que está no seu cluster</h3>
+        <p>Nota de saúde, riscos, capacidade e custos. No 7º dia, uma reunião de diagnóstico mostra o que foi encontrado e por onde começar.</p>
+      </div>
+      <div class="card">
+        <span class="step">PASSO 3</span>
+        <h3>Assine e continue</h3>
+        <p>Escolha o plano e instale a licença definitiva no painel. Nada precisa ser reinstalado, e o histórico do teste continua.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="produto" class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">O produto</p>
+      <h2>O que o Capacity Agent mostra</h2>
+      <p class="lead">Uma avaliação contínua do cluster, em português, com prioridades claras.</p>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F87171" stroke-width="2" aria-hidden="true"><path d="M12 3l9 16H3z"/><path d="M12 10v4"/><path d="M12 17h.01"/></svg>
+        <h3>Riscos</h3>
+        <p>Nodes sob pressão, pods em CrashLoop ou Pending, OOMKilled, HPAs no limite e pools sem folga para perder um node.</p>
+      </div>
+      <div class="card">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#93C5FD" stroke-width="2" aria-hidden="true"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg>
+        <h3>Capacidade</h3>
+        <p>Uso real contra o reservado em cada node e workload, com histórico que acompanha o autoscaling e ajuste de requests sugerido.</p>
+      </div>
+      <div class="card">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FBBF24" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .9-3 2s1.3 1.7 3 2 3 .9 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5"/><path d="M12 6v2"/><path d="M12 16v2"/></svg>
+        <h3>Custo</h3>
+        <p>Quanto custa cada node, namespace e pool, com o preço das suas máquinas, e quanto da capacidade paga está parada.</p>
+      </div>
+      <div class="card">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>
+        <h3>Mudança com controle</h3>
+        <p>Recomendação, aprovação, simulação e execução, sempre com o comando para reverter. Tudo fica registrado na auditoria.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="video" class="section section-alt">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Veja a ferramenta em uso</h2>
+      <p class="lead">Dois minutos e meio pelo painel, com dados de uma empresa fictícia.</p>
+    </div>
+    <div class="video-box">
+      <video controls preload="metadata" playsinline poster="poster.jpg">
+        <source src="capacity-agent-demo.mp4" type="video/mp4">
+        Seu navegador não reproduz vídeo. <a href="capacity-agent-demo.mp4">Baixe o vídeo</a>.
+      </video>
+    </div>
+  </div>
+</section>
+
+<section id="seguranca" class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Feito para passar na revisão de segurança</h2>
+    </div>
+    <div class="points">
+      <div class="point"><strong>Somente leitura</strong><span>A escrita no cluster é opcional e só acontece depois de aprovada.</span></div>
+      <div class="point"><strong>Dados no seu ambiente</strong><span>Tudo fica no volume do seu cluster. A licença é validada offline.</span></div>
+      <div class="point"><strong>Contêiner endurecido</strong><span>Sem root, sistema de arquivos somente leitura e sem capabilities.</span></div>
+      <div class="point"><strong>IA sob o seu controle</strong><span>Desligada por padrão. Quando ligada, usa a IA da sua empresa e mascara dados sensíveis.</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="planos" class="section section-alt">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Planos</p>
+      <h2>Preço em reais, pelo tamanho do seu ambiente</h2>
+      <p class="lead">Sem câmbio nem IOF, com nota fiscal. No plano anual, você paga 10 meses e usa 12.</p>
+    </div>
+    <div class="offer">
+      <p><strong>Oferta de lançamento:</strong> metade do preço nos 3 primeiros meses, no contrato de 12 meses.</p>
+      <p style="font-size:15px">Válida para contratos fechados até 31/12/2026.</p>
+    </div>
+    <div class="plans">
+      <div class="plan">
+        <h3>Essencial</h3>
+        <p class="muted" style="font-size:15px">1 cluster · até 20 nodes · 10 usuários</p>
+        <div>
+          <p class="price"><strong>R$ 345</strong><span> /mês nos 3 primeiros meses</span></p>
+          <p class="muted" style="font-size:15px">Depois, R$ 690/mês</p>
+        </div>
+        <ul>
+          <li>Nota de saúde, riscos, capacidade e custos</li>
+          <li>Recomendações com aprovação e auditoria</li>
+          <li>Suporte em horário comercial</li>
+        </ul>
+        <a class="btn btn-ghost" href="#teste">Começar o teste</a>
+      </div>
+      <div class="plan featured">
+        <div class="plan-head"><h3>Profissional</h3><span class="badge">Recomendado</span></div>
+        <p class="muted" style="font-size:15px">Até 3 clusters · 60 nodes · 25 usuários</p>
+        <div>
+          <p class="price"><strong>R$ 945</strong><span> /mês nos 3 primeiros meses</span></p>
+          <p class="muted" style="font-size:15px">Depois, R$ 1.890/mês</p>
+        </div>
+        <ul>
+          <li>Tudo do Essencial</li>
+          <li>Alertas no Slack, Teams, webhook e e-mail</li>
+          <li>Assistente de IA com a IA da sua empresa</li>
+          <li>Reunião mensal de saúde do cluster no anual</li>
+        </ul>
+        <a class="btn btn-primary" href="#teste">Começar o teste</a>
+      </div>
+      <div class="plan">
+        <h3>Enterprise</h3>
+        <p class="muted" style="font-size:15px">Muitos clusters, ambiente regulado ou grande</p>
+        <p class="price"><span>a partir de </span><strong>R$ 4.900</strong><span> /mês</span></p>
+        <ul>
+          <li>Tudo do Profissional</li>
+          <li>Clusters conectados por agente</li>
+          <li>Limites e usuários sob medida</li>
+          <li>SLA de suporte</li>
+        </ul>
+        <a class="btn btn-ghost" href="#teste">Falar com a gente</a>
+      </div>
+    </div>
+    <p class="muted" style="margin-top:22px;font-size:15px">Implantação acompanhada por R$ 1.500, grátis no plano anual. Pagamento por boleto ou Pix.</p>
+  </div>
+</section>
+
+<section id="blog" class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Blog</p>
+      <h2>Kubernetes na prática</h2>
+    </div>
+    <div class="posts">
+      <a class="post-card" href="blog/requests-kubernetes.html">
+        <span class="mono muted" style="font-size:14px">Capacidade · 8 min de leitura</span>
+        <h3>Requests no Kubernetes: o desperdício e o risco que ninguém vê</h3>
+        <p>Como medir o uso real, escolher requests e limits com segurança e evitar OOMKilled, pods Pending e nodes pagos sem uso.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="teste" class="section section-alt contact">
+  <div class="wrap">
+    <div class="contact-text">
+      <h2>Teste completo por 30 dias, no seu cluster</h2>
+      <p class="lead">Todos os recursos do Enterprise em 1 cluster, com instalação acompanhada se quiser e reunião de diagnóstico no 7º dia. Sem compromisso.</p>
+      <div class="btn-row">
+        <a class="btn btn-primary" href="https://wa.me/5511947229481?text=Ol%C3%A1!%20Quero%20testar%20o%20Capacity%20Agent%20por%2030%20dias.">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 0 1-13.5 7.8L3 21l1.2-4.5A9 9 0 1 1 21 12z"/></svg>
+          Pedir o teste pelo WhatsApp
+        </a>
+        <a class="btn btn-ghost" href="mailto:[SEU-EMAIL]?subject=Teste%20do%20Capacity%20Agent">Pedir por e-mail</a>
+      </div>
+    </div>
+    <div class="contact-box">
+      <h3>Para agilizar, conte na mensagem:</h3>
+      <ol>
+        <li>Nome e empresa</li>
+        <li>Quantos clusters e nodes, mais ou menos</li>
+        <li>Onde roda: AWS, Azure, GCP, outro provedor ou on-premises</li>
+        <li>Versão do Kubernetes, se souber</li>
+      </ol>
+      <p class="muted" style="font-size:14px">Respondemos em até 1 dia útil com a licença de teste e o guia de instalação.</p>
+      <p class="muted" style="font-size:13px">Ao pedir o teste, você concorda com os <a href="termos.html">Termos de uso</a> e com a <a href="privacidade.html">Política de privacidade</a>.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <span><strong style="color:#E8EDF5">Capacity Agent</strong> · por OTERA TECH · © 2026 Eduardo Lorente de Oliveira</span>
+    <span><a href="termos.html">Termos de uso</a> · <a href="privacidade.html">Privacidade</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

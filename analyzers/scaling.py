@@ -7,7 +7,7 @@ recomendação manual: alterar via kubectl seria revertido pelo controlador.
 import math
 import re
 
-from analyzers.workloads import PROTECTED_NAMESPACES, _confidence, _percentile
+from analyzers.workloads import PROTECTED_NAMESPACES, _confidence, _percentile, samples_text
 
 MIN_HA_REPLICAS = 2
 TARGET_UTIL = 0.6          # ocupação alvo do request após o ajuste
@@ -95,7 +95,7 @@ def scaling_recommendations(specs, history, controllers, hpas):
         hpa = hpa_index.get((ns, kind, name))
         confidence, hours = _confidence(w["series"])
         period = f"{hours / 24:.1f} dias" if hours >= 24 else f"{hours:.0f} h"
-        base = f"Base: {len(w['series'])} amostras em {period}, confiança {confidence}."
+        base = f"Base: {samples_text(len(w['series']))} em {period}, confiança {confidence}."
         cpu_util = (w["cpu_p95"] / w["cpu_req"]) if w["cpu_req"] else None
         mem_util = (w["mem_max"] / w["mem_req"]) if w["mem_req"] else None
         params = {"namespace": ns, "kind": kind, "name": name}

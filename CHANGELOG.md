@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.3.1 — Visão Geral mais fiel ao risco
+
+- **Uso da CPU reservada** (antes "Eficiência de CPU"): acima de 100% o card fica amarelo e avisa "acima do
+  reservado: risco de disputa de CPU". Os pods estão usando mais do que reservaram, o que é risco, não eficiência.
+  Abaixo de 30% avisa que sobra CPU reservada. A nota desconta 10 pontos acima de 100%, como já fazia acima de 90%.
+- **Manchete curta:** quando o destaque é uma recomendação, a Visão Geral mostra só o que fazer, sem motivo,
+  base e efeitos. O texto completo continua em Recomendações.
+- **Recomendação sem histórico não vira alerta:** com confiança baixa ela fica só na lista, aguardando dados. Não
+  conta como risco, não vai para a manchete e não dispara Slack, Teams, webhook ou e-mail.
+- Texto das recomendações: "1 amostra" no singular e só os recursos que mudam (sem "CPU 20m → 20m").
+
 ## Kit de entrega — instalador com teste de storage
 
 Correções que vieram de uma instalação real em cliente:

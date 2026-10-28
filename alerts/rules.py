@@ -51,7 +51,9 @@ def build_alerts(report):
         add("pods-pending", "MEDIUM", f"{pending} pod(s) Pending", f"Causas principais: {top or 'ver Scheduling'}.")
 
     for rec in report.get("recommendations", []) or []:
-        if rec.get("severity") == "HIGH" and rec.get("status") == "pending":
+        # Com histórico insuficiente a recomendação fica só na lista, aguardando dados:
+        # não vira alerta nem manchete (seria ruído no Slack/Teams e na Visão Geral).
+        if rec.get("severity") == "HIGH" and rec.get("status") == "pending" and rec.get("confidence") != "baixa":
             add(f"rec:{rec['id']}", "HIGH", f"Recomendação crítica: {rec.get('type')}", rec.get("action", "")[:400])
 
     for reason in (report.get("decision") or {}).get("reasons", []):

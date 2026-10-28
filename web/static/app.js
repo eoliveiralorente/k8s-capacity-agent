@@ -442,6 +442,15 @@ function showExecuteModal(rec, dryRun = false) {
 
 // ── Render ──────────────────────────────────────────────────
 
+// Uso da CPU reservada: abaixo de 30% sobra reserva; acima de 100% os pods usam mais do que
+// reservaram e disputam CPU no node. Os dois casos pedem atenção.
+function cpuReservedKpi(kpi, pct) {
+  if (pct === null || pct === undefined) return kpi("Uso da CPU reservada", "—", "sem métricas de CPU");
+  if (pct > 100) return kpi("Uso da CPU reservada", `${pct}%`, "acima do reservado: risco de disputa de CPU", "warn");
+  if (pct < 30) return kpi("Uso da CPU reservada", `${pct}%`, "pouco uso: CPU reservada sobrando", "warn");
+  return kpi("Uso da CPU reservada", `${pct}%`, "do reservado está em uso");
+}
+
 function renderOverview() {
   loadLicense();
   renderExecutiveOverview();
@@ -1668,8 +1677,7 @@ function renderExecutiveOverview() {
     kpi("Riscos ativos", k.risks ?? 0, k.risks_high ? `${k.risks_high} crítico(s)` : "nenhum crítico", k.risks_high ? "bad" : k.risks ? "warn" : "ok"),
     ov.locked ? kpi("Economia potencial", "🔒", "disponível com licença") : kpi("Economia potencial", k.savings_monthly === null || k.savings_monthly === undefined ? "—" : formatBRL(k.savings_monthly),
       k.savings_monthly === null || k.savings_monthly === undefined ? "configure custos em Usuários e custos" : `por mês · ver detalhes em Custos →`, "ok", "costs"),
-    kpi("Eficiência de CPU", k.cpu_efficiency_pct === null || k.cpu_efficiency_pct === undefined ? "—" : `${k.cpu_efficiency_pct}%`, "do reservado está em uso",
-      k.cpu_efficiency_pct !== null && k.cpu_efficiency_pct < 30 ? "warn" : ""),
+    cpuReservedKpi(kpi, k.cpu_efficiency_pct),
     kpi("Disponibilidade", k.pods_ok_pct === null || k.pods_ok_pct === undefined ? "—" : `${k.pods_ok_pct}%`, `pods saudáveis · ${k.nodes_ready}/${k.nodes_total} nodes Ready`,
       (k.pods_ok_pct ?? 100) < 95 ? "warn" : "ok"),
   ].join("");

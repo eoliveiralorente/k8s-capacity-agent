@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Requests no Kubernetes: o desperdício e o risco que ninguém vê — Capacity Agent</title>
+<meta name="description" content="Como medir o uso real dos pods, escolher requests e limits com segurança e evitar OOMKilled, pods Pending e nodes pagos sem uso. Guia prático com comandos e exemplo.">
+<meta property="og:title" content="Requests no Kubernetes: o desperdício e o risco que ninguém vê">
+<meta property="og:description" content="Guia prático para acertar requests e limits: comandos, consultas e um exemplo com números.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+
+<header class="header">
+  <div class="wrap">
+    <a class="brand" href="../">
+      <span class="brand-mark" aria-hidden="true">CA</span>
+      <span class="brand-name"><strong>Capacity Agent</strong><span>Blog</span></span>
+    </a>
+    <nav class="nav" aria-label="Principal">
+      <a href="../#produto">O produto</a>
+      <a href="./">Todos os artigos</a>
+      <a class="btn btn-primary" href="../#teste">Teste grátis</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<article class="article">
+  <p class="eyebrow">Capacidade</p>
+  <h1>Requests no Kubernetes: o desperdício e o risco que ninguém vê</h1>
+  <p class="meta">27 de outubro de 2026 · 8 min de leitura</p>
+
+  <p>Na maioria dos clusters que analisamos, os requests foram definidos uma vez, no chute, e nunca mais revisados. O resultado aparece de dois jeitos: nodes pagos que ficam parados, e pods que caem por falta de memória mesmo com o cluster "folgado". Os dois problemas têm a mesma causa e a mesma solução: medir o uso real e ajustar.</p>
+
+  <h2>O que requests e limits fazem de verdade</h2>
+  <div class="table-box">
+    <table>
+      <tr><th></th><th>Requests</th><th>Limits</th></tr>
+      <tr><td><strong>Para que serve</strong></td><td>Reserva: o scheduler só coloca o pod num node que tenha esse tanto livre</td><td>Teto: o máximo que o container pode usar</td></tr>
+      <tr><td><strong>CPU</strong></td><td>Garante uma fatia da CPU do node</td><td>Acima do limit, o container é estrangulado (throttling) e fica lento</td></tr>
+      <tr><td><strong>Memória</strong></td><td>Reserva memória no node</td><td>Acima do limit, o container é morto (OOMKilled)</td></tr>
+      <tr><td><strong>Efeito no custo</strong></td><td>Define quantos nodes você precisa, porque o cluster lota pela reserva, não pelo uso</td><td>Não muda o custo diretamente</td></tr>
+    </table>
+  </div>
+  <p>O ponto que mais confunde: <strong>o cluster enche pelos requests, não pelo uso.</strong> Um node pode estar com 20% de CPU em uso e, mesmo assim, recusar pods novos, porque 100% dele já está reservado.</p>
+
+  <h2>Os dois erros mais comuns</h2>
+  <h3>Requests altos demais: dinheiro parado</h3>
+  <p>Um deployment pede 1 vCPU por réplica e usa 150m. Multiplique pelas réplicas e pelos deployments e você tem nodes inteiros reservados sem uso. O autoscaler de cluster também enxerga a reserva, então ele <em>adiciona</em> nodes quando o cluster parece cheio. Outro sintoma: pods <code>Pending</code> com <code>Insufficient cpu</code> num cluster que está quase ocioso.</p>
+
+  <h3>Requests baixos demais, ou ausentes: risco de queda</h3>
+  <p>Sem requests, o scheduler acha que o pod não consome nada e empilha vários no mesmo node. Quando todos usam memória de verdade, o node entra em pressão e o Kubernetes começa a despejar pods (eviction). Pods sem requests nem limits ficam na classe de QoS <code>BestEffort</code> e são os primeiros a sair. Com o limit de memória baixo, o problema é o <code>OOMKilled</code> em loop, que aparece como <code>CrashLoopBackOff</code>.</p>
+
+  <h2>Como medir o uso real</h2>
+  <p>Comece pelo retrato do momento, com o metrics-server:</p>
+<pre><code>kubectl top pods -n minha-app --containers
+kubectl top nodes</code></pre>
+  <p>O retrato do momento engana: pode ser madrugada, ou pode ser o pico. Para decidir, use pelo menos 7 dias de histórico, que cobrem o ciclo da semana. Com Prometheus, estas consultas dão o p95 de CPU e o pico de memória de cada container:</p>
+<pre><code># CPU: p95 dos últimos 7 dias, em núcleos
+quantile_over_time(0.95,
+  (sum by (namespace, pod, container) (
+    rate(container_cpu_usage_seconds_total{container!=""}[5m])
+  ))[7d:5m]
+)
+
+# Memória: pico do working set nos últimos 7 dias, em bytes
+max_over_time(
+  container_memory_working_set_bytes{container!=""}[7d]
+)</code></pre>
+
+  <h2>A regra prática para ajustar</h2>
+  <ul>
+    <li><strong>Request de CPU:</strong> o p95 de 7 dias mais 20% de folga.</li>
+    <li><strong>Request de memória:</strong> o pico de 7 dias mais 20% a 30%. Memória não se estica como CPU: faltou, o container morre.</li>
+    <li><strong>Limit de memória:</strong> igual ao request ou pouco acima. Assim o comportamento fica previsível e o node não é surpreendido.</li>
+    <li><strong>Limit de CPU:</strong> é o ponto mais debatido. Muitas equipes não definem limit de CPU para evitar throttling. Se você define, deixe bastante folga acima do request.</li>
+  </ul>
+
+  <h3>Um exemplo com números</h3>
+  <p>Um deployment <code>api</code> com 6 réplicas pede <code>1000m</code> de CPU e <code>2Gi</code> de memória por réplica. Em 7 dias, o p95 de CPU ficou em 180m e o pico de memória em 600Mi.</p>
+  <div class="table-box">
+    <table>
+      <tr><th></th><th>Antes</th><th>Depois</th><th>Diferença nas 6 réplicas</th></tr>
+      <tr><td>CPU por réplica</td><td>1000m</td><td>250m (180m + 20%, arredondado)</td><td>4,5 vCPU liberados</td></tr>
+      <tr><td>Memória por réplica</td><td>2Gi</td><td>768Mi (600Mi + 28%)</td><td>cerca de 7,5 GiB liberados</td></tr>
+    </table>
+  </div>
+  <p>Só esse deployment devolve quase um node inteiro de 4 vCPU e 8 GiB, sem mudar nada na aplicação.</p>
+
+  <h2>Checklist de 15 minutos</h2>
+  <p>Pods com algum container sem requests:</p>
+<pre><code>kubectl get pods -A -o json | jq -r '.items[]
+  | select(any(.spec.containers[]; .resources.requests == null))
+  | "\(.metadata.namespace)/\(.metadata.name)"'</code></pre>
+  <p>Pods que já morreram por falta de memória:</p>
+<pre><code>kubectl get pods -A -o json | jq -r '.items[]
+  | select(any(.status.containerStatuses[]?; .lastState.terminated.reason == "OOMKilled"))
+  | "\(.metadata.namespace)/\(.metadata.name)"'</code></pre>
+  <p>Quanto de cada node está reservado:</p>
+<pre><code>kubectl describe node NOME-DO-NODE | grep -A 8 "Allocated resources"</code></pre>
+
+  <h2>Três cuidados antes de mudar</h2>
+  <ol>
+    <li><strong>O HPA usa os requests.</strong> Se o HPA escala em 70% de CPU, ele calcula esse percentual sobre o request. Ao baixar o request, o mesmo uso vira um percentual maior e o HPA cria mais réplicas. Revise o alvo do HPA junto.</li>
+    <li><strong>Mude aos poucos.</strong> Comece pelos deployments com a maior diferença entre reserva e uso, um por vez, e acompanhe por alguns dias.</li>
+    <li><strong>Simule antes de aplicar.</strong> Use <code>kubectl apply --dry-run=server</code> e mantenha o comando para voltar ao valor anterior.</li>
+  </ol>
+
+  <div class="callout">
+    <p><strong>Quer isso feito para o seu cluster inteiro?</strong> O Capacity Agent mede o uso real de cada container com histórico, sugere requests com nível de confiança, mostra o efeito no custo e aplica só depois de aprovação e simulação, com o comando para reverter.</p>
+    <p><a class="btn btn-primary" href="../#teste" style="margin-top:6px">Testar grátis por 30 dias</a></p>
+  </div>
+</article>
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <span><strong style="color:#E8EDF5">Capacity Agent</strong> · por OTERA TECH</span>
+    <span><a href="../termos.html">Termos de uso</a> · <a href="../privacidade.html">Privacidade</a> · <a href="../">Voltar ao site</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

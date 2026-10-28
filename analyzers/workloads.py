@@ -35,6 +35,10 @@ PROTECTED_NAMESPACES = {
 }
 
 
+def samples_text(n):
+    return f"{n} amostra" if n == 1 else f"{n} amostras"
+
+
 def workload_owner(pod):
     """Retorna (kind, nome) do controlador do pod, ou None."""
     metadata = pod.get("metadata", {})
@@ -179,11 +183,15 @@ def rightsizing_recommendations(specs, history):
 
         period = f"{hours / 24:.1f} dias" if hours >= 24 else f"{hours:.0f} h"
         target = f"{spec['kind'].lower()}/{spec['name']}"
+        changes = []
+        if new_cpu != cur_cpu:
+            changes.append(f"CPU {fmt_cpu(cur_cpu) if cur_cpu else '—'} → {fmt_cpu(new_cpu)}")
+        if new_mem != cur_mem:
+            changes.append(f"memória {fmt_mem(cur_mem) if cur_mem else '—'} → {fmt_mem(new_mem)}")
         action = (
             f"Ajustar requests de {target} (container {spec['container']}, ns {spec['namespace']}): "
-            f"CPU {fmt_cpu(cur_cpu) if cur_cpu else '—'} → {fmt_cpu(new_cpu)}, "
-            f"memória {fmt_mem(cur_mem) if cur_mem else '—'} → {fmt_mem(new_mem)}. "
-            f"Motivo: {'; '.join(reasons)}. Base: {len(series)} amostras em {period}, confiança {confidence}. "
+            f"{', '.join(changes)}. "
+            f"Motivo: {'; '.join(reasons)}. Base: {samples_text(len(series))} em {period}, confiança {confidence}. "
             "Aplicar reinicia os pods do workload (rolling update)."
         )
 

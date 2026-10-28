@@ -1,0 +1,43 @@
+POST — SEMANA 1 (carrossel em PDF)
+Publicar: terça, entre 8h e 9h. Anexe o arquivo carrossel-crashloop.pdf como "Documento" e dê o título:
+"CrashLoopBackOff em 5 passos"
+
+---------------------------------------------------------------
+Seu pod está em CrashLoopBackOff. E agora?
+
+A maioria das pessoas faz duas coisas: apaga o pod e torce. Ou abre o log e lê o container errado.
+
+CrashLoopBackOff não é o erro. É o sintoma: o container sobe, cai, e o Kubernetes tenta de novo esperando cada vez mais.
+
+O roteiro que eu sigo em produção:
+
+1. kubectl describe: Reason e Exit Code dizem como ele morreu
+2. kubectl logs --previous: o log de quem caiu, não do novo
+3. Memória: uso real × limit (137 + OOMKilled = estourou)
+4. O que mudou: rollout history e events
+5. Corrigir, validar e registrar a causa
+
+No carrossel tem a tabela dos exit codes e um caso de exemplo: 23 reinícios, 0 Mi de memória usada. Spoiler: não era memória.
+
+Salve para o próximo incidente.
+
+Qual desses passos você costuma pular?
+
+#Kubernetes #DevOps #SRE #Troubleshooting #Cloud
+---------------------------------------------------------------
+
+PRIMEIRO COMENTÁRIO (logo depois de publicar):
+"Se você quer treinar esse tipo de investigação com incidentes reais, é assim que trabalho na Mentoria DevOps na Prática: https://mentoria-devops-na-p-odw7.bolt.host/?utm_source=linkedin&utm_campaign=crashloop"
+
+---------------------------------------------------------------
+VÍDEO (video-crashloop.mp4) — publicar na quinta como reforço, ou usar em vez do PDF:
+Legenda do post:
+"CrashLoopBackOff em 45 segundos: os 5 passos que eu sigo antes de mexer em qualquer coisa. Salve para o próximo incidente. #Kubernetes #DevOps #SRE"
+Dica: no LinkedIn, faça o upload direto (não link do YouTube) e escolha o slide 1 como capa.
+
+---------------------------------------------------------------
+REAPROVEITAMENTO
+- Mentoria, semana 07: o PDF vira material de apoio do laboratório de troubleshooting.
+- Site da Mentoria: o slide 8 (resumo) serve de imagem para a seção "Troubleshooting".
+- Site Otera: quando o nome do produto puder aparecer, os prints do slide 2 e 5 entram na página do produto.
+- Responder quem comentar "pulo o passo 2": é a deixa para mandar o link da mentoria na mensagem.

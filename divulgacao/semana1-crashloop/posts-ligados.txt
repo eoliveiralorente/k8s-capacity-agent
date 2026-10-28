@@ -1,0 +1,47 @@
+CARROSSEL + VÍDEO — COMO LIGAR OS DOIS POSTS
+O LinkedIn não aceita PDF e vídeo no mesmo post. A ligação é feita com a mesma história, uma série com nome ("Investigando um cluster #1, partes 1 e 2") e links cruzados nos comentários.
+
+=================================================================
+TERÇA — PARTE 1: CARROSSEL (carrossel-crashloop.pdf, título do documento: "CrashLoopBackOff em 5 passos")
+Use o texto do arquivo post-semana1.txt e troque o fim por:
+
+"...Salve para o próximo incidente.
+Na quinta eu mostro o mesmo pod sendo encontrado num painel, em 1 minuto. É a parte 2.
+Qual desses passos você costuma pular?"
+
+=================================================================
+QUINTA — PARTE 2: VÍDEO (video-painel-crashloop.mp4, 1min25, 1920x1080)
+Upload direto no LinkedIn (não link do YouTube). Capa: o quadro de abertura.
+
+Texto:
+---------------------------------------------------------------
+Investigando um cluster #1, parte 2.
+
+Na terça eu mostrei os 5 comandos para investigar um CrashLoopBackOff.
+Hoje, o mesmo caso visto no Capacity Agent, a ferramenta que estou construindo:
+
+- a nota de saúde do cluster já aponta o problema
+- o mapa de nodes mostra onde o pod está
+- 23 reinícios e 0 Mi de memória: não é memória, é o deploy
+- a pendência fica registrada com responsável e prazo
+- e, no mesmo lugar, quanto o cluster desperdiça por mês
+
+Nada muda no cluster sem aprovação, simulação e auditoria.
+
+O passo a passo dos comandos está no carrossel (link no primeiro comentário).
+Dados fictícios de demonstração.
+
+#Kubernetes #DevOps #SRE #FinOps #CapacityAgent
+---------------------------------------------------------------
+
+PRIMEIRO COMENTÁRIO DA PARTE 2:
+"Parte 1, com os 5 comandos: [cole aqui o link do post do carrossel]
+Quer ver o seu cluster no Capacity Agent? Ele roda dentro do seu cluster, somente leitura. Me chame por mensagem que eu mostro."
+
+DEPOIS DE PUBLICAR A PARTE 2, volte no post da parte 1 e comente:
+"Parte 2 no ar: o mesmo pod encontrado no Capacity Agent, em 1 minuto → [link do post do vídeo]"
+
+=================================================================
+QUEM COMENTAR:
+- Iniciante ("não sabia do --previous"): agradeça e convide para a mentoria.
+- Sênior ou gestor ("que ferramenta é essa?"): responda e chame no privado com a mensagem de abordagem do plano de divulgação.

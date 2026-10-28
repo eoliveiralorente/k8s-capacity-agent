@@ -58,7 +58,7 @@ def describe(history):
     days = history["hours"] / 24
     period = f"{days:.1f} dias" if days >= 1 else f"{history['hours']:.0f} h"
     return (
-        f"histórico: {history['samples']} amostras em {period}, "
+        f"histórico: {history['samples']} amostra{'' if history['samples'] == 1 else 's'} em {period}, "
         f"pico CPU {history['cpu_usage_max']}% / p95 {history['cpu_usage_p95']}%, "
         f"pico memória {history['mem_usage_max']}% / p95 {history['mem_usage_p95']}% "
         f"— confiança {history['confidence']}"

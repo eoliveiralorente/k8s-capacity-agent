@@ -56,5 +56,41 @@ class ScoreTest(unittest.TestCase):
         self.assertTrue(o["top_risks"][0]["title"].startswith("Ajuste recomendado"))
 
 
+class OverviewReadabilityTest(unittest.TestCase):
+    """Correções da 1.3.1: CPU acima do reservado, manchete curta e recomendação sem histórico."""
+
+    def base(self, recs, nodes=None):
+        return {"nodes_usage": nodes or [node("a", 40.0, 60.0)],
+                "summary": {"pods": 10, "pending_pods": 0, "cost_settings": {}},
+                "health": {"checks": [{"type": "x", "status": "OK"}]},
+                "recommendations": recs}
+
+    def rec(self, confidence):
+        return {"id": "r1", "type": "INCREASE_REQUESTS", "severity": "HIGH", "status": "pending",
+                "pool": "kube-system/daemonset/npd", "confidence": confidence,
+                "action": "Ajustar requests de daemonset/npd (container npd, ns kube-system): memória 20Mi → 90Mi. "
+                          "Motivo: memória pico 69Mi perto do request 20Mi. Base: 1 amostra em 0 h, confiança baixa. "
+                          "Aplicar reinicia os pods do workload (rolling update)."}
+
+    def test_cpu_above_reserved_is_a_risk(self):
+        o = build_overview(self.base([], nodes=[node("a", 54.4, 20.0)]))
+        self.assertEqual(o["kpis"]["cpu_efficiency_pct"], 272)
+        self.assertIn("acima do reservado", o["explanation"])
+        self.assertTrue(any("acima do reservado" in f["reason"] for f in o["factors"]))
+        self.assertNotIn("Eficiência", o["explanation"])
+
+    def test_low_confidence_rec_is_not_headline(self):
+        o = build_overview(self.base([self.rec("baixa")]))
+        self.assertEqual(o["kpis"]["risks"], 0)
+        self.assertEqual(o["headline"], "Cluster saudável")
+
+    def test_rec_headline_is_short(self):
+        o = build_overview(self.base([self.rec("alta")]))
+        self.assertEqual(o["headline"], "Cluster operando, com pontos de atenção")
+        self.assertIn("memória 20Mi → 90Mi.", o["explanation"])
+        self.assertNotIn("Motivo", o["explanation"])
+        self.assertNotIn("rolling update", o["explanation"])
+
+
 if __name__ == "__main__":
     unittest.main()
