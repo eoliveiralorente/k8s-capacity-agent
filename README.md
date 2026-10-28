@@ -27,7 +27,7 @@ os detalhes, as recomendações e os custos, peça a licença de teste de 30 dia
 
 ```bash
 helm upgrade --install capacity-agent \
-  oci://ghcr.io/eoliveiralorente/charts/capacity-agent --version 1.3.3 \
+  oci://ghcr.io/eoliveiralorente/charts/capacity-agent --version 1.3.4 \
   --namespace capacity-agent --create-namespace \
   --set clusterName="Produção"
 

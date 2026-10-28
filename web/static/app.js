@@ -224,13 +224,24 @@ document.querySelectorAll("[data-goto]").forEach((btn) => {
 });
 
 // Ajuda: conteúdo em /static/ajuda.html (vai na imagem, funciona sem internet).
+// Paginada: índice à esquerda, um tópico por vez, Anterior/Próximo. A busca mostra todos os tópicos que casam.
 // O "?" do topo abre a ajuda no tópico da tela em que a pessoa está.
 let helpLoaded = null;
+let helpTopic = "ajuda-inicio";
+
 function loadHelp() {
   if (!helpLoaded) {
     helpLoaded = fetch("/static/ajuda.html", { credentials: "same-origin" })
       .then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); })
-      .then((html) => { document.getElementById("help-content").innerHTML = html; })
+      .then((html) => {
+        const box = document.getElementById("help-content");
+        box.innerHTML = html;
+        const pager = document.createElement("div");
+        pager.className = "help-pager";
+        pager.id = "help-pager";
+        box.appendChild(pager);
+        showHelpTopic(helpTopic);
+      })
       .catch(() => {
         helpLoaded = null;
         document.getElementById("help-content").innerHTML = '<p class="muted">Não foi possível carregar a ajuda. Atualize a página.</p>';
@@ -239,26 +250,52 @@ function loadHelp() {
   return helpLoaded;
 }
 
+function helpTopics() {
+  return [...document.querySelectorAll("#help-content .help-item")];
+}
+
+function showHelpTopic(id) {
+  const items = helpTopics();
+  if (!items.length) return;
+  const target = items.find((s) => s.id === id) || items[0];
+  helpTopic = target.id;
+  const box = document.getElementById("help-content");
+  box.classList.remove("searching");
+  document.getElementById("help-empty").classList.add("hidden");
+  items.forEach((s) => s.classList.toggle("current", s === target));
+  box.querySelectorAll(".help-index a").forEach((a) => {
+    a.classList.toggle("active", a.getAttribute("href") === `#${target.id}`);
+  });
+  const i = items.indexOf(target);
+  const prev = items.at(i - 1), next = items.at(i + 1);
+  const title = (s) => escapeHtml(s.querySelector("h3")?.textContent || "");
+  document.getElementById("help-pager").innerHTML = `
+    ${i > 0 ? `<button class="btn btn-ghost" type="button" data-help-go="${prev.id}">← ${title(prev)}</button>` : "<span></span>"}
+    <span class="help-pager-count">${i + 1} de ${items.length}</span>
+    ${next && i < items.length - 1 ? `<button class="btn btn-ghost" type="button" data-help-go="${next.id}">${title(next)} →</button>` : "<span></span>"}`;
+  document.getElementById("tab-help")?.scrollIntoView({ block: "start" });
+}
+
 function openHelp(topic) {
   switchTab("help");
   loadHelp().then(() => {
-    const search = document.getElementById("help-search");
-    if (search.value) { search.value = ""; filterHelp(""); }
-    const el = document.getElementById(`ajuda-${topic}`) || document.getElementById("ajuda-inicio");
-    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("help-search").value = "";
+    showHelpTopic(`ajuda-${topic}`);
   });
 }
 
 function filterHelp(query) {
-  const q = query.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const fold = (s) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const q = fold(query.trim());
+  if (!q) { showHelpTopic(helpTopic); return; }
+  const box = document.getElementById("help-content");
+  box.classList.add("searching");
   let shown = 0;
-  document.querySelectorAll("#help-content .help-item").forEach((s) => {
-    const text = s.textContent.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const hit = !q || text.includes(q);
+  helpTopics().forEach((s) => {
+    const hit = fold(s.textContent).includes(q);
     s.classList.toggle("hidden", !hit);
     if (hit) shown += 1;
   });
-  document.querySelector("#help-content .help-index")?.classList.toggle("hidden", Boolean(q));
   document.getElementById("help-empty").classList.toggle("hidden", shown > 0);
 }
 
@@ -268,9 +305,12 @@ document.getElementById("btn-help").addEventListener("click", () => {
 document.getElementById("help-search").addEventListener("input", (e) => filterHelp(e.target.value));
 document.getElementById("help-content").addEventListener("click", (e) => {
   const link = e.target.closest('.help-index a[href^="#ajuda-"]');
-  if (!link) return;
+  const go = e.target.closest("[data-help-go]");
+  if (!link && !go) return;
   e.preventDefault();
-  document.getElementById(link.getAttribute("href").slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("help-search").value = "";
+  helpTopics().forEach((s) => s.classList.remove("hidden"));
+  showHelpTopic(link ? link.getAttribute("href").slice(1) : go.dataset.helpGo);
 });
 
 function switchTab(tab) {

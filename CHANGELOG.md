@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.3.4 — ajuda paginada
+
+- A ajuda mostra um tópico por vez, com índice fixo à esquerda (tópico atual destacado) e botões
+  Anterior/Próximo com o nome do tópico vizinho. Em telas estreitas, o índice vai para cima.
+- A busca continua listando todos os tópicos encontrados; clicar no índice volta à página.
+
 ## v1.3.3 — ajuda dentro do painel
 
 - **Menu Ajuda:** primeiros passos, guia de cada tela, papéis de usuário, glossário (request, limit, p95, confiança,
