@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.3.2 — recomendações só do que é do cliente
+
+- **Componentes do sistema à parte:** recomendações em `kube-system` e namespaces da plataforma (componentes
+  que o provedor instala e reverte no upgrade) vão para o grupo "Componentes do sistema (gerenciados pelo
+  provedor)", recolhido no fim da lista, com severidade baixa. Não entram no contador do menu, na nota, na
+  economia potencial nem nos alertas. A lista de namespaces é configurável em
+  `CAPACITY_AGENT_SYSTEM_NAMESPACES` (padrão: kube-system, kube-public, kube-node-lease, calico-system,
+  tigera-operator). Namespaces protegidos do cliente, como `monitoring`, continuam no fluxo normal.
+- **Requests em sentidos opostos:** quando a CPU desce e a memória sobe (ou o contrário), a recomendação
+  aparece em "Ajustar requests (um recurso sobe, outro desce)", não mais em "Aumentar requests".
+- "Ajustar requests (sobra)" passa a se chamar "Reduzir requests (sobra)".
+
 ## v1.3.1 — Visão Geral mais fiel ao risco
 
 - **Uso da CPU reservada** (antes "Eficiência de CPU"): acima de 100% o card fica amarelo e avisa "acima do

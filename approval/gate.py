@@ -135,6 +135,10 @@ def gate_summary():
 
     for item in items:
         status = item["status"]
+        if item.get("system") and status == "pending":
+            # Pendências de componentes do provedor não entram no contador do painel.
+            counts["system_pending"] = counts.get("system_pending", 0) + 1
+            continue
         counts[status] = counts.get(status, 0) + 1
 
     return {

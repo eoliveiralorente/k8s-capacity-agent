@@ -86,7 +86,8 @@ def build_overview(report):
         penalty(10, f"CPU reservada quase toda em uso ({efficiency}%)")
 
     workers = [n for n in nodes if not n.get("control_plane")]
-    no_request_recs = [r for r in report.get("recommendations", []) if r.get("type") == "MISSING_REQUESTS"]
+    no_request_recs = [r for r in report.get("recommendations", [])
+                       if r.get("type") == "MISSING_REQUESTS" and not r.get("system")]
     penalty(min(10, 2 * len(no_request_recs)), "workloads sem requests definidos")
 
     score = max(0, 100 + sum(f["points"] for f in factors))
@@ -95,7 +96,8 @@ def build_overview(report):
     status = "Saudável" if score >= 85 else "Atenção" if score >= 60 else "Crítico"
 
     savings_items = sorted(
-        (r for r in report.get("recommendations", []) if (r.get("estimated_monthly") or 0) > 0),
+        (r for r in report.get("recommendations", [])
+         if (r.get("estimated_monthly") or 0) > 0 and not r.get("system")),
         key=lambda r: -r["estimated_monthly"],
     )
     savings_total = round(sum(r["estimated_monthly"] for r in savings_items), 2)

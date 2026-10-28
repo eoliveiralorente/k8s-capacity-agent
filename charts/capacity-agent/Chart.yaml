@@ -2,6 +2,6 @@ apiVersion: v2
 name: capacity-agent
 description: Capacity Agent self-hosted — painel instalado no próprio cluster do cliente (empresa única), leitura via ServiceAccount.
 type: application
-version: 1.3.1
-appVersion: "1.3.1"
+version: 1.3.2
+appVersion: "1.3.2"
 keywords: [kubernetes, capacity, sre, finops, rightsizing]

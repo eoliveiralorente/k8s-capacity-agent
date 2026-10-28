@@ -224,6 +224,10 @@ def rightsizing_recommendations(specs, history):
             "action": action,
             "message": action,
             "confidence": confidence,
+            "directions": {
+                "cpu": "up" if new_cpu > cur_cpu else "down" if new_cpu < cur_cpu else None,
+                "memory": "up" if new_mem > cur_mem else "down" if new_mem < cur_mem else None,
+            },
             "operation": operation,
         })
     return recs

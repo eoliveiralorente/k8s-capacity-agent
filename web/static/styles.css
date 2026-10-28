@@ -1412,3 +1412,6 @@ tr.rec-focus td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
 .license-lock-actions { display: inline-flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; }
 .license-trial { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 14px; }
 a.btn, a.btn:hover { text-decoration: none; }
+
+.rec-group-system { opacity: .85; }
+.rec-group-note { margin: 0 16px 12px; font-size: 13px; color: var(--text-muted); line-height: 1.5; }

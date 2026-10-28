@@ -686,6 +686,16 @@ function buildRecTable(items, compact = false) {
   `;
 }
 
+// Grupo da recomendação na tela: componentes do provedor à parte; requests com um recurso subindo e
+// outro descendo não ficam sob "Aumentar" nem "Reduzir".
+function recGroupKey(r) {
+  if (r.system) return "SYSTEM";
+  const d = r.directions || {};
+  if ((r.type === "INCREASE_REQUESTS" || r.type === "RIGHTSIZE_REQUESTS")
+      && ((d.cpu === "up" && d.memory === "down") || (d.cpu === "down" && d.memory === "up"))) return "ADJUST_REQUESTS";
+  return r.type;
+}
+
 function renderRecommendations() {
   const el = document.getElementById("recommendations-table");
   const items = state.recommendations;
@@ -693,11 +703,25 @@ function renderRecommendations() {
     el.innerHTML = buildRecTable(items);
   } else {
     const groups = {};
-    items.forEach((r) => { (groups[r.type] = groups[r.type] || []).push(r); });
+    items.forEach((r) => { const g = recGroupKey(r); (groups[g] = groups[g] || []).push(r); });
     const impact = (list) => list.reduce((t, r) => t + Math.max(r.estimated_monthly || 0, 0), 0);
     const worst = (list) => Math.min(...list.map((r) => SEV_RANK[r.severity] ?? 9));
-    const ordered = Object.entries(groups).sort(([, a], [, b]) => worst(a) - worst(b) || impact(b) - impact(a));
+    const ordered = Object.entries(groups).sort(([ka, a], [kb, b]) =>
+      (ka === "SYSTEM") - (kb === "SYSTEM") || worst(a) - worst(b) || impact(b) - impact(a));
     el.innerHTML = ordered.map(([type, list]) => {
+      if (type === "SYSTEM") {
+        return `
+        <details class="rec-group rec-group-system">
+          <summary>
+            <span class="rec-group-title">${escapeHtml(REC_TYPE_LABELS.SYSTEM)}</span>
+            <span class="rec-group-count">${list.length}</span>
+          </summary>
+          <p class="rec-group-note">Componentes que a plataforma do cluster instala e gerencia (kube-system e similares).
+            Ajustar à mão não resolve: o provedor reverte no próximo upgrade. Não entram na nota, nos alertas
+            nem no contador. Se algum número chamar atenção, encaminhe ao suporte do provedor.</p>
+          <div class="table-wrap">${buildRecTable(list)}</div>
+        </details>`;
+      }
       list.sort((a, b) => (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9)
         || (b.estimated_monthly || 0) - (a.estimated_monthly || 0));
       const money = impact(list);
@@ -1623,8 +1647,10 @@ function renderNodesUsage() {
 }
 
 const REC_TYPE_LABELS = {
-  RIGHTSIZE_REQUESTS: "Ajustar requests (sobra)",
+  RIGHTSIZE_REQUESTS: "Reduzir requests (sobra)",
   INCREASE_REQUESTS: "Aumentar requests (pressão)",
+  ADJUST_REQUESTS: "Ajustar requests (um recurso sobe, outro desce)",
+  SYSTEM: "Componentes do sistema (gerenciados pelo provedor)",
   MISSING_REQUESTS: "Definir requests ausentes",
   INCREASE_REPLICAS: "Aumentar réplicas",
   REDUCE_REPLICAS: "Reduzir réplicas",

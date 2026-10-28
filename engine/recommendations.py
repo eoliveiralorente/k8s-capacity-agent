@@ -1,9 +1,33 @@
 import hashlib
+import os
 import uuid
 from datetime import datetime, timezone
 
 from config import CLUSTER, KUBERNETES_PROVIDER, PROJECT, REGION, REQUIRE_APPROVAL
 from tenant_context import current_cluster_provider, current_tenant_id
+
+
+# Namespaces de componentes que a plataforma instala e gerencia (o cliente não ajusta: o provedor
+# reverte no upgrade). Recomendações neles ficam num grupo à parte, com severidade baixa, fora da
+# contagem, da nota e dos alertas.
+SYSTEM_NAMESPACES = {
+    ns.strip() for ns in os.getenv(
+        "CAPACITY_AGENT_SYSTEM_NAMESPACES",
+        "kube-system,kube-public,kube-node-lease,calico-system,tigera-operator",
+    ).split(",") if ns.strip()
+}
+
+
+def rec_namespace(rec):
+    params = (rec.get("operation") or {}).get("params") or {}
+    if params.get("namespace"):
+        return params["namespace"]
+    pool = rec.get("pool") or ""
+    return pool.split("/", 1)[0] if "/" in pool else None
+
+
+def is_system_rec(rec):
+    return rec_namespace(rec) in SYSTEM_NAMESPACES
 
 
 EXECUTABLE_TYPES = {
@@ -133,12 +157,15 @@ def enrich_recommendations(recommendations, node_pools, capacity=None):
             operation = _manual_operation("Escalonamento automático disponível apenas no modo GKE configurado")
         rec_type = rec.get("type", "UNKNOWN")
         source = rec.get("source", "unknown")
+        system = rec_namespace({**rec, "operation": operation}) in SYSTEM_NAMESPACES
 
         enriched.append({
             "id": _stable_id(source, rec_type, pool_name),
             "source": source,
             "type": rec_type,
-            "severity": rec.get("severity", "MEDIUM"),
+            "severity": "LOW" if system else rec.get("severity", "MEDIUM"),
+            "system": system,
+            "directions": rec.get("directions"),
             "pool": pool_name,
             "message": rec.get("message", rec.get("action", "")),
             "action": rec.get("action", ""),

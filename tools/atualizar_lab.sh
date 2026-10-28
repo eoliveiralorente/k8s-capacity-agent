@@ -46,7 +46,7 @@ fi
 
 if [ "$TARGET" = "tudo" ] || [ "$TARGET" = "demo" ]; then
   step "Demo no Docker (porta 8081)"
-  sudo CAPACITY_AGENT_PORT=8081 CAPACITY_AGENT_VERSION="$APPV-demo" docker compose -p capacity-agent-v2 up -d --build
+  sudo CAPACITY_AGENT_PORT=8081 CAPACITY_AGENT_VERSION="$APPV-demo" docker compose -p capacity-agent-v2 up -d --build --force-recreate
   for _ in $(seq 1 30); do
     sudo -n docker compose -p capacity-agent-v2 exec -T capacity-agent \
       python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)" >/dev/null 2>&1 && break

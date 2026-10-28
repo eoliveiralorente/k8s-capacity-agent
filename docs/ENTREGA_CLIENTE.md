@@ -30,12 +30,12 @@ Um token por cliente: se um cliente sair, você revoga só o dele.
 
 ```bash
 # Piloto: enterprise, 1 cluster, 5 usuários, 30 dias
-python3 tools/kit_cliente.py --customer "Empresa X" --version 1.3.1 --pilot
+python3 tools/kit_cliente.py --customer "Empresa X" --version 1.3.2 --pilot
 
 # Contrato: o plano define recursos e limites (use --days 30 para mensal)
-python3 tools/kit_cliente.py --customer "Empresa X" --version 1.3.1 --plan essencial --days 365
-python3 tools/kit_cliente.py --customer "Empresa X" --version 1.3.1 --plan profissional --days 365
-python3 tools/kit_cliente.py --customer "Empresa X" --version 1.3.1 --plan enterprise \
+python3 tools/kit_cliente.py --customer "Empresa X" --version 1.3.2 --plan essencial --days 365
+python3 tools/kit_cliente.py --customer "Empresa X" --version 1.3.2 --plan profissional --days 365
+python3 tools/kit_cliente.py --customer "Empresa X" --version 1.3.2 --plan enterprise \
   --clusters 6 --users 50 --nodes 150 --days 365
 ```
 
@@ -76,7 +76,7 @@ Confira com `python3 tools/license_tool.py verify entregas/<cliente>/<cliente>.l
 
 1. Publique a versão (tag `vX.Y.Z`) e confira no GHCR que a imagem existe.
 2. Gere o kit com a versão nova e `--force`, com o mesmo plano do cliente:
-   `python3 tools/kit_cliente.py --customer "Empresa X" --version 1.3.1 --plan profissional --days 365 --force`
+   `python3 tools/kit_cliente.py --customer "Empresa X" --version 1.3.2 --plan profissional --days 365 --force`
 3. Envie só o `.zip`. O cliente roda `./instalar.sh` de novo e confirma a atualização
    (passo a passo no `ATUALIZACAO.md` do kit). Ele não precisa do token nem de instalar a licença outra vez:
    a licença que já está no painel continua valendo.

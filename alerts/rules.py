@@ -53,6 +53,9 @@ def build_alerts(report):
     for rec in report.get("recommendations", []) or []:
         # Com histórico insuficiente a recomendação fica só na lista, aguardando dados:
         # não vira alerta nem manchete (seria ruído no Slack/Teams e na Visão Geral).
+        # Componentes gerenciados pelo provedor (kube-system etc.) também não viram alerta.
+        if rec.get("system"):
+            continue
         if rec.get("severity") == "HIGH" and rec.get("status") == "pending" and rec.get("confidence") != "baixa":
             add(f"rec:{rec['id']}", "HIGH", f"Recomendação crítica: {rec.get('type')}", rec.get("action", "")[:400])
 
