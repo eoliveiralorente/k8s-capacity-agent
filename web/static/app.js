@@ -223,6 +223,56 @@ document.querySelectorAll("[data-goto]").forEach((btn) => {
   });
 });
 
+// Ajuda: conteúdo em /static/ajuda.html (vai na imagem, funciona sem internet).
+// O "?" do topo abre a ajuda no tópico da tela em que a pessoa está.
+let helpLoaded = null;
+function loadHelp() {
+  if (!helpLoaded) {
+    helpLoaded = fetch("/static/ajuda.html", { credentials: "same-origin" })
+      .then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then((html) => { document.getElementById("help-content").innerHTML = html; })
+      .catch(() => {
+        helpLoaded = null;
+        document.getElementById("help-content").innerHTML = '<p class="muted">Não foi possível carregar a ajuda. Atualize a página.</p>';
+      });
+  }
+  return helpLoaded;
+}
+
+function openHelp(topic) {
+  switchTab("help");
+  loadHelp().then(() => {
+    const search = document.getElementById("help-search");
+    if (search.value) { search.value = ""; filterHelp(""); }
+    const el = document.getElementById(`ajuda-${topic}`) || document.getElementById("ajuda-inicio");
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
+function filterHelp(query) {
+  const q = query.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  let shown = 0;
+  document.querySelectorAll("#help-content .help-item").forEach((s) => {
+    const text = s.textContent.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const hit = !q || text.includes(q);
+    s.classList.toggle("hidden", !hit);
+    if (hit) shown += 1;
+  });
+  document.querySelector("#help-content .help-index")?.classList.toggle("hidden", Boolean(q));
+  document.getElementById("help-empty").classList.toggle("hidden", shown > 0);
+}
+
+document.getElementById("btn-help").addEventListener("click", () => {
+  openHelp(state.currentTab === "help" ? "inicio" : state.currentTab || "overview");
+});
+document.getElementById("help-search").addEventListener("input", (e) => filterHelp(e.target.value));
+document.getElementById("help-content").addEventListener("click", (e) => {
+  const link = e.target.closest('.help-index a[href^="#ajuda-"]');
+  if (!link) return;
+  e.preventDefault();
+  document.getElementById(link.getAttribute("href").slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
 function switchTab(tab) {
   state.currentTab = tab;
   document.querySelectorAll(".nav-item").forEach((b) => {
@@ -244,6 +294,7 @@ function switchTab(tab) {
     assistant: "Assistente IA",
     journal: "Diário de bordo",
     support: "Suporte",
+    help: "Ajuda",
   };
   document.getElementById("page-title").textContent = titles[tab] || tab;
   if (tab === "users" && can("admin")) {
@@ -254,6 +305,7 @@ function switchTab(tab) {
   if (tab === "assistant") loadAssistantConfig().catch(() => {});
   if (tab === "journal") loadJournal();
   if (tab === "support") loadSupportHealth();
+  if (tab === "help") loadHelp();
   if (tab === "cluster" && state.selectedClusterId) {
     loadClusterPods().catch((error) => {
       state.podError = error.message;

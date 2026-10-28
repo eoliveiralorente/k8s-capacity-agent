@@ -1,0 +1,275 @@
+<!-- Ajuda do Capacity Agent: carregada pela aba "Ajuda" do painel (funciona sem internet).
+     Cada <section class="help-item"> é um tópico da busca. O id "ajuda-<aba>" é aberto pelo botão "?" da tela. -->
+
+<nav class="help-index" aria-label="Tópicos da ajuda">
+  <a href="#ajuda-inicio">Primeiros passos</a>
+  <a href="#ajuda-overview">Visão Geral</a>
+  <a href="#ajuda-recommendations">Recomendações</a>
+  <a href="#ajuda-costs">Custos</a>
+  <a href="#ajuda-capacity">Nodes e capacidade</a>
+  <a href="#ajuda-scheduling">Pods e scheduling</a>
+  <a href="#ajuda-assistant">Assistente IA</a>
+  <a href="#ajuda-journal">Diário de bordo</a>
+  <a href="#ajuda-audit">Auditoria</a>
+  <a href="#ajuda-relatorio">Relatório executivo</a>
+  <a href="#ajuda-cluster">Clusters e conexões</a>
+  <a href="#ajuda-users">Usuários e custos</a>
+  <a href="#ajuda-support">Suporte</a>
+  <a href="#ajuda-papeis">Papéis</a>
+  <a href="#ajuda-glossario">Glossário</a>
+  <a href="#ajuda-faq">Perguntas frequentes</a>
+  <a href="#ajuda-problemas">Problemas e soluções</a>
+</nav>
+
+<section class="help-item" id="ajuda-inicio">
+  <h3>Primeiros passos</h3>
+  <p>O Capacity Agent lê o cluster, compara o uso real com o que foi reservado e mostra riscos, custos e
+    recomendações. Ele é somente leitura: nada muda no cluster sem aprovação.</p>
+  <ol>
+    <li><strong>Crie a conta de administrador.</strong> A primeira conta criada é a de admin. As próximas entram por convite.</li>
+    <li><strong>Instale a licença</strong> em <em>Usuários e custos → Licença</em> (arquivo <code>.license.json</code>).</li>
+    <li><strong>Cadastre os preços</strong> das máquinas em <em>Usuários e custos → Custos da infraestrutura</em>. Sem preços, a ferramenta funciona, mas não mostra valores em reais.</li>
+    <li><strong>Clique em Nova Avaliação</strong> no topo da tela. Em poucos minutos aparecem a nota, os riscos e as recomendações.</li>
+    <li><strong>Configure os alertas</strong> (opcional) em <em>Usuários e custos → Alertas</em>.</li>
+  </ol>
+  <p class="help-note">As recomendações ficam mais confiáveis com o tempo: a ferramenta coleta amostras a cada 15 minutos e
+    usa o histórico para sugerir ajustes. Nas primeiras horas, muitas aparecem com confiança baixa.</p>
+</section>
+
+<section class="help-item" id="ajuda-overview">
+  <h3>Visão Geral</h3>
+  <p>O resumo do cluster ativo, para técnicos e gestores lerem o mesmo número.</p>
+  <ul>
+    <li><strong>Nota de saúde (0 a 100):</strong> começa em 100 e perde pontos por riscos críticos, pontos de atenção,
+      ajustes importantes pendentes, falhas de coleta e uso da CPU reservada fora da faixa saudável. Passe o mouse sobre o
+      círculo para ver cada desconto. De 85 para cima é <em>Saudável</em>, de 60 a 84 é <em>Atenção</em>, abaixo de 60 é <em>Crítico</em>.
+      Com um risco crítico aberto, a nota nunca passa de 79.</li>
+    <li><strong>Manchete:</strong> o principal motivo da nota, em uma frase.</li>
+    <li><strong>Status da coleta:</strong> se as métricas de nodes e pods estão chegando. Abaixo de 100%, os números ficam incompletos.</li>
+    <li><strong>Riscos ativos:</strong> problemas que pedem ação (node fora do ar, pod reiniciando, pods Pending, coletor parado).</li>
+    <li><strong>Economia potencial:</strong> soma das recomendações que liberam recursos, em reais por mês. Exige preços cadastrados.</li>
+    <li><strong>Uso da CPU reservada:</strong> quanto da CPU reservada pelos pods está sendo usada. Abaixo de 30% sobra reserva;
+      acima de 100% os pods usam mais do que reservaram e disputam CPU no node. Os dois casos aparecem em amarelo.</li>
+    <li><strong>Disponibilidade:</strong> percentual de pods saudáveis e nodes prontos.</li>
+    <li><strong>Prioridades agora, Maiores economias e Pendências abertas:</strong> atalhos para o que fazer primeiro.
+      O botão <strong>+</strong> em um risco cria uma pendência no Diário de bordo.</li>
+  </ul>
+</section>
+
+<section class="help-item" id="ajuda-recommendations">
+  <h3>Recomendações</h3>
+  <p>Ajustes sugeridos, agrupados por tipo. Cada um traz o motivo, os números usados e a confiança.</p>
+  <ul>
+    <li><strong>Grupos:</strong> aumentar requests (pressão), reduzir requests (sobra), ajustar requests quando um recurso sobe e outro desce,
+      definir requests ausentes, réplicas, HPA e pool de nodes subutilizado.</li>
+    <li><strong>Componentes do sistema (gerenciados pelo provedor):</strong> grupo recolhido no fim da lista com o que roda em
+      <code>kube-system</code> e namespaces da plataforma. Esses componentes são do provedor do cluster: ajustar à mão não
+      resolve, porque o provedor reverte no próximo upgrade. Não entram na nota, nos alertas nem no contador. Se algum número
+      chamar atenção, encaminhe ao suporte do provedor.</li>
+    <li><strong>Modo EXECUTÁVEL ou MANUAL:</strong> executável pode ser aplicado pela ferramenta depois de aprovado. Manual mostra o motivo:
+      namespace protegido, histórico insuficiente, workload gerenciado por GitOps (altere no repositório) ou execução desligada.</li>
+    <li><strong>Fluxo:</strong> <em>Pendente → Aprovar ou Rejeitar → Simular (dry-run) → Executar</em>. Rejeitar pede um motivo e a recomendação
+      continua rejeitada nas próximas avaliações. Tudo vai para a Auditoria.</li>
+    <li><strong>Execução:</strong> só existe se o administrador da instalação ligar <code>rbac.allowRightsizing</code>. Ajustar requests reinicia
+      os pods do workload (rolling update).</li>
+  </ul>
+</section>
+
+<section class="help-item" id="ajuda-costs">
+  <h3>Custos</h3>
+  <p>Para onde vai o dinheiro do cluster, a partir dos preços cadastrados em <em>Usuários e custos</em>.</p>
+  <ul>
+    <li><strong>Custo do mês:</strong> nodes (pelo preço de cada tipo de máquina) mais os custos fixos (taxa do Kubernetes gerenciado, load balancers).</li>
+    <li><strong>Capacidade ociosa:</strong> o que está pago e ninguém reservou.</li>
+    <li><strong>Por namespace e por node pool:</strong> quanto cada área consome, pela reserva dos pods.</li>
+    <li><strong>Economias possíveis:</strong> recomendações que liberam recursos. A economia vira dinheiro quando permite remover nodes.</li>
+  </ul>
+  <p class="help-note">A média pelo histórico, que acompanha o autoscaling, aparece depois de 24 horas de coleta.
+    A ferramenta mostra onde há sobra e risco; ela não garante redução de custo.</p>
+</section>
+
+<section class="help-item" id="ajuda-capacity">
+  <h3>Nodes e capacidade</h3>
+  <p>Uso e reserva de cada node e de cada pool.</p>
+  <ul>
+    <li><strong>Em uso</strong> vem do metrics-server. <strong>Reservado</strong> é a soma dos requests dos pods do node.
+      Os percentuais são sobre o allocatable do node.</li>
+    <li>Clique em um node para ver os pods dele, o uso e a reserva de cada um e os pods sem request.</li>
+    <li>Nodes de control plane aparecem marcados e ficam fora das contas de capacidade de trabalho.</li>
+  </ul>
+</section>
+
+<section class="help-item" id="ajuda-scheduling">
+  <h3>Pods e scheduling</h3>
+  <p>Pods que não conseguem rodar e o motivo.</p>
+  <ul>
+    <li><strong>Causas:</strong> falta de CPU, falta de memória, volume (PVC) que não foi criado, regras de agendamento (taints,
+      afinidade, seletores) ou causa a investigar.</li>
+    <li><strong>Namespaces impactados</strong> e <strong>pods com problema</strong> (CrashLoopBackOff, OOMKilled, ImagePullBackOff, Pending).</li>
+  </ul>
+</section>
+
+<section class="help-item" id="ajuda-assistant">
+  <h3>Assistente IA</h3>
+  <p>Perguntas em português sobre o cluster, respondidas com os dados da última avaliação.</p>
+  <ul>
+    <li>Vem <strong>desligado</strong>. O admin escolhe o provedor em <em>Configuração do provedor de IA</em>: Claude, OpenAI, Azure OpenAI,
+      Gemini, OpenRouter, Tess ou Ollama (IA local, sem dados saindo da empresa).</li>
+    <li>Antes de qualquer envio, tokens, senhas, IPs e e-mails são mascarados.</li>
+    <li>O assistente <strong>nunca executa nada</strong>. Ele explica e sugere; quem decide é você.</li>
+  </ul>
+</section>
+
+<section class="help-item" id="ajuda-journal">
+  <h3>Diário de bordo</h3>
+  <p>Notas do dia e pendências do time, ligadas a riscos, nodes ou recomendações.</p>
+  <ul>
+    <li><strong>+ Nota do dia</strong> registra o que aconteceu. <strong>+ Nova pendência</strong> cria uma tarefa com prazo.</li>
+    <li>Filtros: abertas, atrasadas, concluídas. O número no menu mostra as abertas, em vermelho quando há atrasadas.</li>
+  </ul>
+</section>
+
+<section class="help-item" id="ajuda-audit">
+  <h3>Auditoria</h3>
+  <p>Registro de tudo o que foi feito no painel: avaliações, aprovações, rejeições, execuções, convites, mudanças de papel,
+    licença instalada, clusters cadastrados e pacotes de suporte gerados. Cada linha diz quem fez e quando.</p>
+</section>
+
+<section class="help-item" id="ajuda-relatorio">
+  <h3>Relatório executivo</h3>
+  <p>Abre em outra aba um resumo para gestores, com a mesma nota, os riscos e as economias. Use o botão de impressão do relatório
+    para salvar em PDF.</p>
+</section>
+
+<section class="help-item" id="ajuda-cluster">
+  <h3>Clusters e conexões</h3>
+  <p>Os clusters da empresa e como o painel chega até eles. O cluster ativo é escolhido no topo da tela.</p>
+  <ul>
+    <li><strong>Instalado dentro do cluster:</strong> o painel lê o próprio cluster. Não precisa cadastrar nada.</li>
+    <li><strong>Conectar com kubeconfig:</strong> envie o arquivo. A credencial é guardada cifrada. Use uma conta somente leitura.</li>
+    <li><strong>Conectar via agente:</strong> <em>Gerar instalação do agente</em> cria um token e o comando para instalar o coletor no
+      outro cluster. O coletor só faz conexões de saída para o painel. <em>Gerar novo token do agente</em> invalida o anterior.</li>
+    <li><strong>Pods:</strong> lista os pods do cluster ativo, com busca por nome e filtro por namespace. Operadores e admins podem abrir os logs de um pod.</li>
+    <li><strong>Remover conexão</strong> apaga o cluster do painel; o cluster em si não é alterado.</li>
+  </ul>
+</section>
+
+<section class="help-item" id="ajuda-users">
+  <h3>Usuários e custos</h3>
+  <p>Configurações da empresa. Só administradores veem esta tela.</p>
+  <ul>
+    <li><strong>Licença:</strong> plano, validade, limites de clusters, usuários e nodes. Para instalar ou renovar, escolha o arquivo
+      <code>.license.json</code> e clique em <em>Instalar licença</em>.</li>
+    <li><strong>Convidar colega:</strong> escolha o papel e gere o link. O convite vale 7 dias e só pode ser usado uma vez.
+      Informar o e-mail restringe o convite a essa pessoa.</li>
+    <li><strong>Custos da infraestrutura:</strong> preço por tipo de máquina (os tipos encontrados no cluster já aparecem para
+      preencher), custos fixos mensais e preço de referência por vCPU e GB de RAM para máquinas sem preço.</li>
+    <li><strong>Alertas:</strong> Slack, Teams, webhook ou e-mail, com severidade mínima. Use <em>Enviar teste</em> antes de salvar.</li>
+  </ul>
+</section>
+
+<section class="help-item" id="ajuda-support">
+  <h3>Suporte</h3>
+  <ul>
+    <li><strong>Saúde da instalação:</strong> versão, banco de dados, gravação, disco, chave de criptografia, licença, coleta, API do cluster e
+      metrics-server, cada um com OK, AVISO ou ERRO e o que fazer.</li>
+    <li><strong>Baixar pacote de suporte:</strong> gera um arquivo para o fornecedor investigar um problema. Ele não inclui senhas, chaves,
+      tokens nem logs das suas aplicações. Você decide se e quando enviar.</li>
+  </ul>
+</section>
+
+<section class="help-item" id="ajuda-papeis">
+  <h3>Papéis de usuário</h3>
+  <table>
+    <thead><tr><th>Papel</th><th>Pode</th></tr></thead>
+    <tbody>
+      <tr><td>Leitor</td><td>Ver todas as telas, relatórios e auditoria; usar o assistente de IA</td></tr>
+      <tr><td>Operador</td><td>Tudo do leitor + rodar avaliação, aprovar e rejeitar recomendações, simular execução, ver logs de pods,
+        usar o diário de bordo e ver a saúde da instalação</td></tr>
+      <tr><td>Admin</td><td>Tudo do operador + clusters e conexões, execução real, licença, custos, alertas, IA, usuários e pacote de suporte</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="help-item" id="ajuda-glossario">
+  <h3>Glossário</h3>
+  <dl>
+    <dt>Request</dt><dd>Quanto de CPU e memória o pod reserva no node. O Kubernetes usa o request para decidir onde o pod cabe.</dd>
+    <dt>Limit</dt><dd>O máximo que o pod pode usar. Passar do limit de memória mata o contêiner (OOMKilled); o de CPU apenas o desacelera.</dd>
+    <dt>Allocatable</dt><dd>A capacidade do node que sobra para os pods, depois do que o sistema operacional e o Kubernetes reservam.</dd>
+    <dt>p95</dt><dd>O valor abaixo do qual ficam 95% das amostras. Ignora picos raros e mostra o uso típico alto.</dd>
+    <dt>Pico</dt><dd>O maior valor medido no período. Usado para memória, porque passar do limit derruba o pod.</dd>
+    <dt>Confiança</dt><dd>Quanto histórico sustenta a recomendação: <em>baixa</em> com menos de 12 amostras (cerca de 3 horas),
+      <em>média</em> a partir disso e <em>alta</em> com 96 amostras ao longo de pelo menos 3 dias. Com confiança baixa a recomendação
+      fica só na lista, sem alerta e sem execução.</dd>
+    <dt>Uso da CPU reservada</dt><dd>CPU em uso dividida pela CPU reservada nos nodes de trabalho.</dd>
+    <dt>Pending</dt><dd>Pod que ainda não foi agendado em nenhum node.</dd>
+    <dt>OOMKilled</dt><dd>Contêiner encerrado por passar do limit de memória.</dd>
+    <dt>CrashLoopBackOff</dt><dd>Contêiner que inicia e cai em sequência; o Kubernetes espera cada vez mais entre as tentativas.</dd>
+    <dt>HPA</dt><dd>Horizontal Pod Autoscaler: aumenta e diminui as réplicas pelo uso. Precisa de requests definidos.</dd>
+    <dt>Namespace protegido</dt><dd>Onde a ferramenta nunca propõe execução. Padrão: <code>kube-system</code>, <code>kube-public</code>,
+      <code>kube-node-lease</code> e <code>monitoring</code>.</dd>
+    <dt>Componentes do sistema</dt><dd>Recomendações em namespaces da plataforma (<code>kube-system</code> e similares), mostradas à parte.</dd>
+    <dt>Dry-run</dt><dd>Simulação: o cluster valida a mudança sem aplicar.</dd>
+  </dl>
+</section>
+
+<section class="help-item" id="ajuda-faq">
+  <h3>Perguntas frequentes</h3>
+  <dl>
+    <dt>A ferramenta envia dados do meu cluster para fora?</dt>
+    <dd>Não. Não há telemetria. Os dados ficam no volume da instalação. As únicas saídas são as que você configura: o provedor de IA
+      (desligado por padrão, com mascaramento) e os destinos de alerta.</dd>
+    <dt>Ela altera alguma coisa no cluster?</dt>
+    <dd>Não por padrão: a instalação é somente leitura. A execução só existe se o admin ligar <code>rbac.allowRightsizing</code>, e cada
+      mudança passa por aprovação, simulação e auditoria. Namespaces protegidos nunca são alterados.</dd>
+    <dt>Por que uma recomendação está como MANUAL?</dt>
+    <dd>O motivo aparece na própria recomendação: namespace protegido, histórico insuficiente, workload gerenciado por GitOps (o
+      ArgoCD ou o Flux reverteria a mudança; altere no repositório) ou execução desligada.</dd>
+    <dt>Por que aparecem recomendações do kube-system?</dt>
+    <dd>São componentes do provedor do cluster. Ficam no grupo <em>Componentes do sistema</em>, fora da nota e dos alertas. Se algum
+      número chamar atenção, encaminhe ao suporte do provedor.</dd>
+    <dt>O que acontece quando a licença vence?</dt>
+    <dd>A ferramenta avisa 30 dias antes e dá 14 dias de carência. Depois, o painel mostra só a visão geral até a renovação.
+      Nenhum dado é perdido. Instale a licença nova em <em>Usuários e custos → Licença</em>.</dd>
+    <dt>O limite de nodes da licença é pelo pico?</dt>
+    <dd>Não. Conta a média do mês, ponderada pelo tempo. Um pico de autoscaling não estoura o limite; passar da média gera só um aviso.</dd>
+    <dt>Os números não batem com o kubectl top.</dt>
+    <dd>O <code>kubectl top</code> mostra o instante. A ferramenta usa o histórico (p95 e pico). Clique em <em>Nova Avaliação</em> para atualizar
+      a fotografia.</dd>
+    <dt>Como atualizo a ferramenta?</dt>
+    <dd>Rode o instalador do kit novo (<code>bash instalar.sh</code>) e responda <em>s</em> em "Atualizar para a versão". Dados, licença e
+      token são mantidos. Detalhes no arquivo ATUALIZACAO.md do kit.</dd>
+  </dl>
+</section>
+
+<section class="help-item" id="ajuda-problemas">
+  <h3>Problemas e soluções</h3>
+  <table>
+    <thead><tr><th>Sintoma</th><th>Causa provável</th><th>O que fazer</th></tr></thead>
+    <tbody>
+      <tr><td>Painel mostra só a visão geral, com cadeado</td><td>Sem licença, ou licença vencida depois da carência</td>
+        <td>Instale a licença em <em>Usuários e custos → Licença</em>, ou peça o teste grátis pelo botão do painel</td></tr>
+      <tr><td>Uso de CPU e memória aparece como "—"</td><td>metrics-server ausente ou parado</td>
+        <td><code>kubectl top nodes</code> precisa responder. Instale ou corrija o metrics-server</td></tr>
+      <tr><td>Pod reiniciando com OOMKilled</td><td>O contêiner passou do limit de memória</td>
+        <td>Veja a recomendação de aumentar requests do workload; suba o limit de memória junto com o request</td></tr>
+      <tr><td>Pods Pending</td><td>Falta de CPU ou memória nos nodes, volume não criado ou regras de agendamento</td>
+        <td>Veja a causa em <em>Pods e scheduling</em>; com autoscaler, confira o máximo de nodes do grupo</td></tr>
+      <tr><td>Recomendações com confiança baixa</td><td>Pouco histórico</td><td>Aguarde algumas horas de coleta; nada a corrigir</td></tr>
+      <tr><td>Status da coleta abaixo de 100%</td><td>Nodes ou pods sem métricas</td><td>Veja <em>Suporte → Saúde da instalação</em></td></tr>
+      <tr><td>Login não se mantém (volta para a tela de entrada)</td><td>Acesso por HTTP sem TLS, com cookies seguros ligados</td>
+        <td>Acesse por HTTPS (Ingress com certificado) ou por port-forward em localhost</td></tr>
+      <tr><td>Instalação para no teste de storage</td><td>Cota de disco do provedor, StorageClass inexistente ou driver parado</td>
+        <td>O instalador mostra a causa. Use <code>--storage-class=&lt;nome&gt;</code> ou veja o GUIA_RAPIDO.md</td></tr>
+      <tr><td>Pod em ImagePullBackOff</td><td>Token de acesso à imagem errado ou vencido</td>
+        <td><code>kubectl -n capacity-agent delete secret capacity-agent-pull</code> e rode o instalador de novo com o token novo</td></tr>
+      <tr><td>Cluster conectado por agente aparece sem dados</td><td>Coletor parado ou sem acesso ao painel</td>
+        <td>Veja os pods do coletor no cluster e a URL do painel; gere um novo token se necessário</td></tr>
+      <tr><td>Alertas não chegam</td><td>URL ou e-mail errado, ou severidade mínima alta demais</td>
+        <td><em>Usuários e custos → Alertas → Enviar teste</em></td></tr>
+      <tr><td>Custos aparecem como "—"</td><td>Preços não cadastrados</td><td><em>Usuários e custos → Custos da infraestrutura</em></td></tr>
+    </tbody>
+  </table>
+  <p>Ainda com problema? Baixe o pacote em <em>Suporte → Baixar pacote de suporte</em> e envie ao fornecedor junto com a descrição.</p>
+</section>

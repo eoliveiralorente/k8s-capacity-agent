@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.3.3 — ajuda dentro do painel
+
+- **Menu Ajuda:** primeiros passos, guia de cada tela, papéis de usuário, glossário (request, limit, p95, confiança,
+  uso da CPU reservada…), perguntas frequentes e problemas com solução. Vai junto com a imagem e funciona sem internet.
+- **Botão "?" no título de cada tela:** abre a ajuda direto no tópico daquela tela.
+- **Busca na ajuda**, que ignora acentos ("licenca" acha "licença").
+
 ## v1.3.2 — recomendações só do que é do cliente
 
 - **Componentes do sistema à parte:** recomendações em `kube-system` e namespaces da plataforma (componentes

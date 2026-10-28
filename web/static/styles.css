@@ -1415,3 +1415,27 @@ a.btn, a.btn:hover { text-decoration: none; }
 
 .rec-group-system { opacity: .85; }
 .rec-group-note { margin: 0 16px 12px; font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+
+/* Ajuda */
+#page-title-row { display: flex; align-items: center; gap: 10px; }
+.help-btn { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border); background: transparent;
+  color: var(--text-muted); font-size: 13px; font-weight: 600; cursor: pointer; line-height: 1; }
+.help-btn:hover { color: var(--text); border-color: var(--primary); }
+.help-body { max-width: 900px; line-height: 1.6; }
+.help-search { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-size: 14px; margin-bottom: 16px; }
+.help-index { display: flex; flex-wrap: wrap; gap: 6px 14px; padding-bottom: 16px; margin-bottom: 8px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.help-index a { color: var(--primary); text-decoration: none; }
+.help-index a:hover { text-decoration: underline; }
+.help-item { padding: 18px 0; border-bottom: 1px solid var(--border); scroll-margin-top: 16px; }
+.help-item h3 { margin: 0 0 8px; font-size: 17px; }
+.help-item p, .help-item li, .help-item dd { color: var(--text); font-size: 14px; }
+.help-item ul, .help-item ol { padding-left: 20px; margin: 8px 0; }
+.help-item li { margin-bottom: 6px; }
+.help-item dt { font-weight: 600; margin-top: 12px; font-size: 14px; }
+.help-item dd { margin: 4px 0 0 0; color: var(--text-muted); }
+.help-item code { font-size: 12.5px; background: var(--bg-hover); padding: 1px 5px; border-radius: 4px; }
+.help-item table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
+.help-item th, .help-item td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.help-note { color: var(--text-muted) !important; font-size: 13px !important; }
+.help-empty { color: var(--text-muted); }

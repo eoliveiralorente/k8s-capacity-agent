@@ -81,6 +81,7 @@
         <button class="nav-item" data-tab="cluster">Clusters e conexões</button>
         <button class="nav-item hidden" data-tab="users" id="nav-users">Usuários e custos</button>
         <button class="nav-item hidden" data-tab="support" id="nav-support">Suporte</button>
+        <button class="nav-item" data-tab="help">Ajuda</button>
       </nav>
 
       <div class="sidebar-footer">
@@ -95,7 +96,8 @@
       <div class="demo-banner hidden" id="demo-banner"></div>
       <header class="topbar">
         <div>
-          <h2 id="page-title">Visão Geral</h2>
+          <h2 id="page-title-row"><span id="page-title">Visão Geral</span>
+            <button class="help-btn" id="btn-help" type="button" title="Ajuda desta tela" aria-label="Ajuda desta tela">?</button></h2>
           <p id="page-subtitle">Monitoramento e aprovação de alterações no cluster</p>
         </div>
         <div class="cluster-switcher">
@@ -558,6 +560,16 @@
           </div>
         </div>
         <div id="journal-list"></div>
+      </section>
+
+      <section class="tab-panel" id="tab-help">
+        <div class="panel">
+          <div class="panel-body help-body">
+            <input type="search" id="help-search" class="help-search" placeholder="Buscar na ajuda (ex.: licença, OOMKilled, custos)" aria-label="Buscar na ajuda">
+            <p class="help-empty hidden" id="help-empty">Nada encontrado. Tente outra palavra ou veja Problemas e soluções.</p>
+            <div id="help-content"><p class="muted">Carregando a ajuda…</p></div>
+          </div>
+        </div>
       </section>
 
       <section class="tab-panel" id="tab-audit">

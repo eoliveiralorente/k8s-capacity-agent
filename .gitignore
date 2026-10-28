@@ -33,5 +33,3 @@ kubeconfig*
 /entregas/
 # Versão gravada pelo tools/atualizar_producao.sh na pasta da produção
 /VERSION
-testes/stress/linha-do-tempo.csv
-testes/stress/relatorio-*.md
